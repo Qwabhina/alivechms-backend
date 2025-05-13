@@ -7,7 +7,8 @@ class ORM
 
     public function __construct()
     {
-        $this->pdo = (new Database())->getConnection();
+        // $this->pdo = (new Database())->getConnection();
+        $this->pdo = Database::getInstance()->getConnection();
         $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     }
 
@@ -75,7 +76,7 @@ class ORM
         return ['rows_affected' => $stmt->rowCount()];
     }
 
-    public function softDelete(string $table, $column = 'id', $value)
+    public function softDelete(string $table, $value, $column = 'id')
     {
         $sql = "UPDATE `$table` SET deleted_at = NOW() WHERE `$column` = :id";
         $stmt = $this->pdo->prepare($sql);
