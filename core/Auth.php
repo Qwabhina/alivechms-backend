@@ -7,8 +7,8 @@ use Firebase\JWT\Key;
 
 class Auth
 {
-    private static $accessTokenTTL = 900;       // 15 minutes
-    private static $refreshTokenTTL = 604800;   // 7 days
+    private static $accessTokenTTL = 1800;       // 30 minutes
+    private static $refreshTokenTTL = 86400;   // 1 day
     private static $secretKey;
     private static $refreshSecretKey;
 
