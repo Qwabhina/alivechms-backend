@@ -42,6 +42,8 @@ class Auth
         $refreshToken = self::generateRefreshToken($user);
         self::storeRefreshToken($user['MbrID'], $refreshToken);
 
+        unset($user['PasswordHash'], $user['passwordText'], $user['MbrCustomID'], $user['CreatedAt'], $user['AuthUserID']);
+
         return [
             "type" => "ok",
             'access_token'  => self::generateToken($user, self::$secretKey, self::$accessTokenTTL),
