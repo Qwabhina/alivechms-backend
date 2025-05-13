@@ -20,18 +20,23 @@ class Auth
         }
     }
 
-    public static function login($username, $password, $table = 'users')
+    public static function login($username, $password)
     {
         self::initKeys();
         $orm = new ORM();
-        $user = $orm->getWhere($table, ['Username' => $username])[0] ?? null;
+        $user = $orm->getWhere('userauthentication', ['Username' => $username])[0] ?? null;
 
-        if (!$user || !password_verify($password, $user['passwordText'])) {
-            throw new Exception('Invalid credentials');
+        if (!$user || !password_verify($password, $user['PasswordHash'])) {
+            throw new Exception('Error: Username or Password is Incorrect');
         }
 
+        // PROCESS USER HERE
+        $bio = $orm->runQuery("");
+
+        // END PROCESSING
+
         $refreshToken = self::generateRefreshToken($user);
-        self::storeRefreshToken($user['id'], $refreshToken);
+        self::storeRefreshToken($user['MbrID'], $refreshToken);
 
         return [
             'access_token'  => self::generateToken($user, self::$secretKey, self::$accessTokenTTL),
@@ -43,9 +48,8 @@ class Auth
     {
         $issuedAt = time();
         $payload = [
-            'sub'   => $user['id'],
-            'email' => $user['email'],
-            'role'  => $user['role'],
+            'user_id'   => $user['MbrID'],
+            'user' => $user['Username'],
             'iat'   => $issuedAt,
             'exp'   => $issuedAt + $ttl
         ];
