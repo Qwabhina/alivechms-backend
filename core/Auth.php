@@ -33,8 +33,10 @@ class Auth
             params: [':username' => $username, ':status' => 'Active']
         )[0] ?? null;
 
-        if (!$user || !password_verify($password, $user['PasswordHash'])) {
-            throw new Exception('Error: Username or Password is Incorrect');
+        if (!$user) {
+            throw new Exception("Error: We didn't find this Username");
+        } elseif (!password_verify($password, $user['PasswordHash'])) {
+            throw new Exception("Error: Password is Incorrect");
         }
 
         $refreshToken = self::generateRefreshToken($user);
@@ -156,5 +158,24 @@ class Auth
     {
         $orm = new ORM();
         $orm->delete('refresh_tokens', ['expires_at < NOW()']);
+    }
+
+    public static function logout($refreshToken)
+    {
+        self::revokeRefreshToken($refreshToken);
+        return ['message' => 'Logged out successfully'];
+    }
+    public static function getUserFromToken($token)
+    {
+        $decoded = self::verify($token);
+        if (!$decoded) {
+            return null;
+        }
+        return [
+            'id' => $decoded->user_id,
+            'username' => $decoded->user,
+            'iat' => $decoded->iat,
+            'exp' => $decoded->exp
+        ];
     }
 }
