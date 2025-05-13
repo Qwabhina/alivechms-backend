@@ -20,13 +20,13 @@ class Auth
         }
     }
 
-    public static function login($email, $password)
+    public static function login($username, $password, $table = 'users')
     {
         self::initKeys();
         $orm = new ORM();
-        $user = $orm->getWhere('users', ['email' => $email])[0] ?? null;
+        $user = $orm->getWhere($table, ['Username' => $username])[0] ?? null;
 
-        if (!$user || !password_verify($password, $user['password'])) {
+        if (!$user || !password_verify($password, $user['passwordText'])) {
             throw new Exception('Invalid credentials');
         }
 
