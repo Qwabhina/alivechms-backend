@@ -3,8 +3,8 @@
 switch ($path) {
     case 'auth/login':
         $input = json_decode(file_get_contents("php://input"), true);
-        $token = Auth::login($input['username'], $input['password'], 'userauthentication');
-        echo json_encode(['token' => $token]);
+        $output = Auth::login($input['username'], $input['password']);
+        echo json_encode($output);
         break;
 
     case 'secure/user-data':
