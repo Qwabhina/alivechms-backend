@@ -90,4 +90,58 @@ class ORM
         $stmt->execute($params);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
+
+    public function selectWithJoin(
+        string $baseTable,
+        array $joins = [],
+        array $fields = ['*'],
+        array $conditions = [],
+        array $params = [],
+        array $orderBy = [],
+        int $limit = 0,
+        int $offset = 0
+    ): array {
+        $select = implode(', ', $fields);
+        $sql = "SELECT {$select} FROM {$baseTable}";
+
+        // JOIN clauses
+        foreach ($joins as $join) {
+            $type = strtoupper($join['type'] ?? 'INNER');
+            $table = $join['table'];
+            $on = $join['on'];
+            $sql .= " {$type} JOIN {$table} ON {$on}";
+        }
+
+        // WHERE clause
+        if (!empty($conditions)) {
+            $where = [];
+            foreach ($conditions as $column => $placeholder) {
+                $where[] = "{$column} = {$placeholder}";
+            }
+            $sql .= ' WHERE ' . implode(' AND ', $where);
+        }
+
+        // ORDER BY
+        if (!empty($orderBy)) {
+            $orderClauses = [];
+            foreach ($orderBy as $column => $direction) {
+                $direction = strtoupper($direction) === 'DESC' ? 'DESC' : 'ASC';
+                $orderClauses[] = "{$column} {$direction}";
+            }
+            $sql .= ' ORDER BY ' . implode(', ', $orderClauses);
+        }
+
+        // LIMIT and OFFSET
+        if ($limit > 0) {
+            $sql .= " LIMIT {$limit}";
+            if ($offset > 0) {
+                $sql .= " OFFSET {$offset}";
+            }
+        }
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 }
