@@ -10,7 +10,7 @@ $dotenv->load();
 
 header('Content-Type: application/json');
 
-$path = $_GET['path'] ?? '';
+$path = $_SERVER['REQUEST_URI'] ?? '';
 $pathParts = explode('/', trim($path, '/'));
 $section = $pathParts[0] ?? '';
 
