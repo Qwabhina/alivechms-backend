@@ -28,6 +28,8 @@ try {
         'secure'       => 'AuthRoutes.php',
         'contribution' => 'ContributionRoutes.php',
         'search'       => 'SearchRoutes.php',
+        'member'       => 'MemberRoutes.php',
+        'dashboard'    => 'DashboardRoutes.php',
         'paginate'     => 'PaginationRoutes.php',
         'soft-delete'  => 'PaginationRoutes.php',
         'upload'       => 'UploadRoutes.php',
