@@ -6,17 +6,18 @@ error_reporting(E_ALL);
 
 
 require_once __DIR__ . '/vendor/autoload.php';
-require_once __DIR__ . '/core/ORM.php';
-require_once __DIR__ . '/core/Auth.php';
-
 
 $dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
 $dotenv->load();
 
+require_once __DIR__ . '/core/ORM.php';
+require_once __DIR__ . '/core/Auth.php';
+
+
 
 header('Content-Type: application/json');
 
-// $path = $_SERVER['REQUEST_URI'] ?? '';
+
 $path = $_GET['path'] ?? '';
 $pathParts = explode('/', trim($path, '/'));
 $section = $pathParts[0] ?? '';

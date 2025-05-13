@@ -165,6 +165,7 @@ class Auth
         self::revokeRefreshToken($refreshToken);
         return ['message' => 'Logged out successfully'];
     }
+
     public static function getUserFromToken($token)
     {
         $decoded = self::verify($token);
