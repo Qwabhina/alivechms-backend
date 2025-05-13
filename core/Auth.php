@@ -24,23 +24,27 @@ class Auth
     {
         self::initKeys();
         $orm = new ORM();
-        $user = $orm->getWhere('userauthentication', ['Username' => $username])[0] ?? null;
+        $user = $orm->selectWithJoin(
+            baseTable: 'userauthentication u',
+            joins: [
+                ['table' => 'churchmember s', 'on' => 'u.MbrID = s.MbrCustomID']
+            ],
+            conditions: ['u.username' => ':username', 's.MbrMembershipStatus' => ':status'],
+            params: [':username' => $username, ':status' => 'Active']
+        )[0] ?? null;
 
         if (!$user || !password_verify($password, $user['PasswordHash'])) {
             throw new Exception('Error: Username or Password is Incorrect');
         }
 
-        // PROCESS USER HERE
-        $bio = $orm->runQuery("");
-
-        // END PROCESSING
-
         $refreshToken = self::generateRefreshToken($user);
         self::storeRefreshToken($user['MbrID'], $refreshToken);
 
         return [
+            "type" => "ok",
             'access_token'  => self::generateToken($user, self::$secretKey, self::$accessTokenTTL),
-            'refresh_token' => $refreshToken
+            'refresh_token' => $refreshToken,
+            'bio' => $user,
         ];
     }
 
