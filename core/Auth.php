@@ -1,0 +1,152 @@
+<?php
+require_once __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/ORM.php';
+
+use Firebase\JWT\JWT;
+use Firebase\JWT\Key;
+
+class Auth
+{
+    private static $accessTokenTTL = 900;       // 15 minutes
+    private static $refreshTokenTTL = 604800;   // 7 days
+    private static $secretKey;
+    private static $refreshSecretKey;
+
+    private static function initKeys()
+    {
+        if (!self::$secretKey) {
+            self::$secretKey = getenv('JWT_SECRET') ?: 'default-access-secret';
+            self::$refreshSecretKey = getenv('JWT_REFRESH_SECRET') ?: 'default-refresh-secret';
+        }
+    }
+
+    public static function login($email, $password)
+    {
+        self::initKeys();
+        $orm = new ORM();
+        $user = $orm->getWhere('users', ['email' => $email])[0] ?? null;
+
+        if (!$user || !password_verify($password, $user['password'])) {
+            throw new Exception('Invalid credentials');
+        }
+
+        $refreshToken = self::generateRefreshToken($user);
+        self::storeRefreshToken($user['id'], $refreshToken);
+
+        return [
+            'access_token'  => self::generateToken($user, self::$secretKey, self::$accessTokenTTL),
+            'refresh_token' => $refreshToken
+        ];
+    }
+
+    private static function generateToken($user, $secret, $ttl)
+    {
+        $issuedAt = time();
+        $payload = [
+            'sub'   => $user['id'],
+            'email' => $user['email'],
+            'role'  => $user['role'],
+            'iat'   => $issuedAt,
+            'exp'   => $issuedAt + $ttl
+        ];
+
+        return JWT::encode($payload, $secret, 'HS256');
+    }
+
+    private static function generateRefreshToken($user)
+    {
+        return self::generateToken($user, self::$refreshSecretKey, self::$refreshTokenTTL);
+    }
+
+    private static function storeRefreshToken($userId, $token)
+    {
+        $orm = new ORM();
+        $decoded = JWT::decode($token, new Key(self::$refreshSecretKey, 'HS256'));
+        $expiresAt = date('Y-m-d H:i:s', $decoded->exp);
+
+        $orm->insert('refresh_tokens', [
+            'user_id'    => $userId,
+            'token'      => $token,
+            'expires_at' => $expiresAt,
+            'revoked'    => false
+        ]);
+    }
+
+    public static function refreshAccessToken($refreshToken)
+    {
+        self::initKeys();
+
+        $decoded = self::verify($refreshToken, self::$refreshSecretKey);
+        if (!$decoded) {
+            throw new Exception('Invalid refresh token');
+        }
+
+        $orm = new ORM();
+        $tokenRecord = $orm->getWhere('refresh_tokens', ['token' => $refreshToken])[0] ?? null;
+
+        if (!$tokenRecord || $tokenRecord['revoked'] || strtotime($tokenRecord['expires_at']) < time()) {
+            throw new Exception('Refresh token is expired or revoked');
+        }
+
+        // Optionally revoke old refresh token and issue a new one:
+        $orm->update('refresh_tokens', ['revoked' => true], ['id' => $tokenRecord['id']]);
+
+        $user = [
+            'id'    => $decoded->sub,
+            'email' => $decoded->email,
+            'role'  => $decoded->role
+        ];
+
+        // Issue new tokens
+        $newAccessToken = self::generateToken($user, self::$secretKey, self::$accessTokenTTL);
+        $newRefreshToken = self::generateRefreshToken($user);
+        self::storeRefreshToken($user['id'], $newRefreshToken);
+
+        return [
+            'access_token'  => $newAccessToken,
+            'refresh_token' => $newRefreshToken
+        ];
+    }
+
+    public static function verify($token, $secret = null)
+    {
+        self::initKeys();
+        try {
+            return JWT::decode($token, new Key($secret ?? self::$secretKey, 'HS256'));
+        } catch (Exception $e) {
+            return null;
+        }
+    }
+
+    public static function requireRole($token, $roles = [])
+    {
+        $decoded = self::verify($token);
+        if (!$decoded || !in_array($decoded->role, $roles)) {
+            throw new Exception('Unauthorized');
+        }
+        return $decoded;
+    }
+
+    public static function getBearerToken()
+    {
+        $headers = getallheaders();
+        if (!empty($headers['Authorization'])) {
+            if (preg_match('/Bearer\s(\S+)/', $headers['Authorization'], $matches)) {
+                return $matches[1];
+            }
+        }
+        return null;
+    }
+
+    public static function revokeRefreshToken($refreshToken)
+    {
+        $orm = new ORM();
+        $orm->update('refresh_tokens', ['revoked' => true], ['token' => $refreshToken]);
+    }
+
+    public static function cleanupExpiredRefreshTokens()
+    {
+        $orm = new ORM();
+        $orm->delete('refresh_tokens', ['expires_at < NOW()']);
+    }
+}

@@ -1,0 +1,31 @@
+# Ignore Composer dependencies
+/vendor/
+
+# Ignore environment configuration
+.env
+.env.*.local
+
+# Ignore IDE/project config files
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# Ignore system files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Ignore logs and temporary files
+*.log
+*.cache
+*.tmp
+
+# Ignore PHPUnit results
+.phpunit.result.cache
+
+# Ignore lock files (optional)
+composer.lock
+
+# Ignore XAMPP-specific backups or config (if any)
+xampp-control.ini
