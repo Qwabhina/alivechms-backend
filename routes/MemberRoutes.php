@@ -1,9 +1,95 @@
 <?php
 
+
 switch ($path) {
-    case 'members/register':
-        $input = json_decode(file_get_contents("php://input"), true);
-        $output = Member::register($input['userid'], $input['passkey'], $input['email']);
-        echo json_encode($output);
+    case 'member/recent':
+        // if ($method !== 'GET') {
+        //     http_response_code(405);
+        //     echo json_encode(['error' => 'Method not allowed']);
+        //     exit;
+        // }
+
+        $token = Auth::getBearerToken();
+        if (!$token || !Auth::verify($token)) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Unauthorized']);
+            exit;
+        }
+
+        $orm = new ORM();
+        $members = $orm->selectWithJoin(
+            baseTable: 'churchmember',
+            conditions: ['MbrMembershipStatus' => ':status'],
+            params: [':status' => 'Active'],
+            orderBy: ['MbrRegistrationDate' => 'DESC'],
+            limit: 10
+        );
+
+        $formattedMembers = array_map(function ($member) {
+            return [
+                'MbrCustomID' => $member['MbrCustomID'],
+                'MbrFirstName' => $member['MbrFirstName'],
+                'MbrFamilyName' => $member['MbrFamilyName'],
+                'MbrRegistrationDate' => $member['MbrRegistrationDate'],
+                'MbrMembershipStatus' => $member['MbrMembershipStatus'],
+                'MbrOtherNames' => $member['MbrOtherNames'] ?? '',
+                'MbrGender' => $member['MbrGender'] ?? 'Male',
+                'MbrPhoneNumbers' => $member['MbrPhoneNumbers'] ?? '',
+                'MbrEmailAddress' => $member['MbrEmailAddress'] ?? '',
+                'MbrResidentialAddress' => $member['MbrResidentialAddress'] ?? '',
+                'MbrDateOfBirth' => $member['MbrDateOfBirth'] ?? '0000-00-00',
+                'MbrOccupation' => $member['MbrOccupation'] ?? 'Not Applicable',
+                'BranchID' => $member['BranchID'] ?? 1,
+                'Username' => '', // Not included unless joined with userauthentication
+                'LastLoginAt' => '' // Not included unless joined
+            ];
+        }, $members);
+
+        echo json_encode($formattedMembers);
         break;
+
+    case 'member/all':
+        // if ($method !== 'POST') { // Matching AppAPI.getAllMembers
+        //     http_response_code(405);
+        //     echo json_encode(['error' => 'Method not allowed']);
+        //     exit;
+        // }
+
+        $token = Auth::getBearerToken();
+        if (!$token || !Auth::verify($token)) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Unauthorized']);
+            exit;
+        }
+
+        $orm = new ORM();
+        $members = $orm->getWhere('churchmember', ['MbrMembershipStatus' => 'Active']);
+
+        $formattedMembers = array_map(function ($member) {
+            return [
+                'MbrCustomID' => $member['MbrCustomID'],
+                'MbrFirstName' => $member['MbrFirstName'],
+                'MbrFamilyName' => $member['MbrFamilyName'],
+                'MbrRegistrationDate' => $member['MbrRegistrationDate'],
+                'MbrMembershipStatus' => $member['MbrMembershipStatus'],
+                'MbrOtherNames' => $member['MbrOtherNames'] ?? '',
+                'MbrGender' => $member['MbrGender'] ?? 'Male',
+                'MbrPhoneNumbers' => $member['MbrPhoneNumbers'] ?? '',
+                'MbrEmailAddress' => $member['MbrEmailAddress'] ?? '',
+                'MbrResidentialAddress' => $member['MbrResidentialAddress'] ?? '',
+                'MbrDateOfBirth' => $member['MbrDateOfBirth'] ?? '0000-00-00',
+                'MbrOccupation' => $member['MbrOccupation'] ?? 'Not Applicable',
+                'BranchID' => $member['BranchID'] ?? 1,
+                'Username' => '',
+                'LastLoginAt' => ''
+            ];
+        }, $members);
+
+        echo json_encode($formattedMembers);
+        break;
+
+    default:
+        http_response_code(404);
+        echo json_encode(['error' => 'Endpoint not found']);
+        exit;
 }
