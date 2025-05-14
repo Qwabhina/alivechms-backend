@@ -5,23 +5,24 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     echo json_encode(['error' => 'Method not allowed']);
     exit;
 }
+$token = Auth::getBearerToken();
+if (!$token || !Auth::verify($token)) {
+    http_response_code(401);
+    echo json_encode(['error' => 'Unauthorized']);
+    exit;
+}
 
 switch ($path) {
     case 'member/recent':
-
-        $token = Auth::getBearerToken();
-        if (!$token || !Auth::verify($token)) {
-            http_response_code(401);
-            echo json_encode(['error' => 'Unauthorized']);
-            exit;
-        }
-
         $orm = new ORM();
         $members = $orm->selectWithJoin(
-            baseTable: 'churchmember',
-            conditions: ['MbrMembershipStatus' => ':status'],
+            baseTable: 'churchmember s',
+            joins: [
+                ['table' => 'userauthentication u', 'on' => 'u.MbrID = s.MbrCustomID']
+            ],
+            conditions: ['s.MbrMembershipStatus' => ':status'],
             params: [':status' => 'Active'],
-            orderBy: ['MbrRegistrationDate' => 'DESC'],
+            orderBy: ['s.MbrRegistrationDate' => 'DESC'],
             limit: 10
         );
 
@@ -40,8 +41,8 @@ switch ($path) {
                 'MbrDateOfBirth' => $member['MbrDateOfBirth'] ?? '0000-00-00',
                 'MbrOccupation' => $member['MbrOccupation'] ?? 'Not Applicable',
                 'BranchID' => $member['BranchID'] ?? 1,
-                'Username' => '', // Not included unless joined with userauthentication
-                'LastLoginAt' => '' // Not included unless joined
+                'Username' => $member['Username'] ?? '',
+                'LastLoginAt' => $member['LastLoginAt'] ?? '0000-00-00 00:00:00'
             ];
         }, $members);
 
@@ -49,13 +50,6 @@ switch ($path) {
         break;
 
     case 'member/all':
-
-        $token = Auth::getBearerToken();
-        if (!$token || !Auth::verify($token)) {
-            http_response_code(401);
-            echo json_encode(['error' => 'Unauthorized']);
-            exit;
-        }
 
         $orm = new ORM();
         $members = $orm->getWhere('churchmember', ['MbrMembershipStatus' => 'Active']);
