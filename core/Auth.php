@@ -141,12 +141,31 @@ class Auth
 
     public static function getBearerToken()
     {
+        // Get headers in a case-insensitive way
         $headers = getallheaders();
-        if (!empty($headers['Authorization'])) {
-            if (preg_match('/Bearer\s(\S+)/', $headers['Authorization'], $matches)) {
-                return $matches[1];
+        $authorization = null;
+
+        // Check for Authorization header (case-insensitive)
+        foreach ($headers as $key => $value) {
+            if (strtolower($key) === 'authorization') {
+                $authorization = $value;
+                break;
             }
         }
+
+        if (empty($authorization)) {
+            error_log('Auth: No Authorization header found');
+            return null;
+        }
+
+        // Match Bearer token with stricter regex
+        if (preg_match('/^Bearer\s+([A-Za-z0-9\-_\.]+)/', $authorization, $matches)) {
+            $token = trim($matches[1]);
+            error_log('Auth: Extracted token: ' . substr($token, 0, 20) . '...');
+            return $token;
+        }
+
+        error_log('Auth: Invalid Authorization header format: ' . $authorization);
         return null;
     }
 
