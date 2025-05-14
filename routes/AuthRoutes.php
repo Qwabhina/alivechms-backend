@@ -34,4 +34,39 @@ switch ($path) {
 
         echo json_encode(['message' => 'Access granted', 'role' => $user->role]);
         break;
+    case 'auth/refresh':
+        if ($_SERVER["REQUEST_METHOD"] !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['error' => 'Method not allowed']);
+            exit;
+        }
+
+        $data = json_decode(file_get_contents('php://input'), true);
+        $refreshToken = $data['refresh_token'] ?? '';
+
+        if (empty($refreshToken)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Refresh token required']);
+            exit;
+        }
+
+        try {
+            $result = Auth::refreshAccessToken($refreshToken);
+            echo json_encode($result);
+        } catch (Exception $e) {
+            http_response_code(401);
+            echo json_encode(['error' => $e->getMessage()]);
+        }
+        break;
+
+    case 'auth/logout':
+        $input = json_decode(file_get_contents("php://input"), true);
+        $output = Auth::logout($input['refresh_token']);
+        echo json_encode($output);
+        break;
+
+    default:
+        http_response_code(404);
+        echo json_encode(['error' => 'Endpoint not found. Please check the URL.']);
+        break;
 }
