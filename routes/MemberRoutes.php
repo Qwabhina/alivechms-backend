@@ -1,13 +1,13 @@
 <?php
 
+if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+    http_response_code(405);
+    echo json_encode(['error' => 'Method not allowed']);
+    exit;
+}
 
 switch ($path) {
     case 'member/recent':
-        // if ($method !== 'GET') {
-        //     http_response_code(405);
-        //     echo json_encode(['error' => 'Method not allowed']);
-        //     exit;
-        // }
 
         $token = Auth::getBearerToken();
         if (!$token || !Auth::verify($token)) {
@@ -49,11 +49,6 @@ switch ($path) {
         break;
 
     case 'member/all':
-        // if ($method !== 'POST') { // Matching AppAPI.getAllMembers
-        //     http_response_code(405);
-        //     echo json_encode(['error' => 'Method not allowed']);
-        //     exit;
-        // }
 
         $token = Auth::getBearerToken();
         if (!$token || !Auth::verify($token)) {
