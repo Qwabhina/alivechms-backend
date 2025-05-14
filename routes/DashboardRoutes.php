@@ -5,16 +5,15 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     exit;
 }
 
-switch ($path) {
-    case 'dashboard/highlights':
-
-        $token = Auth::getBearerToken();
+$token = Auth::getBearerToken();
         if (!$token || !Auth::verify($token)) {
             http_response_code(401);
             echo json_encode(['error' => 'Unauthorized']);
             exit;
         }
 
+switch ($path) {
+    case 'dashboard/highlights':
         $orm = new ORM();
 
         // Total registered members
