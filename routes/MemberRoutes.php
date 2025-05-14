@@ -16,13 +16,10 @@ switch ($path) {
     case 'member/recent':
         $orm = new ORM();
         $members = $orm->selectWithJoin(
-            baseTable: 'churchmember s',
-            joins: [
-                ['table' => 'userauthentication u', 'on' => 'u.MbrID = s.MbrCustomID']
-            ],
-            conditions: ['s.MbrMembershipStatus' => ':status'],
+            baseTable: 'churchmember',
+            conditions: ['MbrMembershipStatus' => ':status'],
             params: [':status' => 'Active'],
-            orderBy: ['s.MbrRegistrationDate' => 'DESC'],
+            orderBy: ['MbrRegistrationDate' => 'DESC'],
             limit: 10
         );
 
