@@ -60,9 +60,28 @@ switch ($path) {
         break;
 
     case 'auth/logout':
-        $input = json_decode(file_get_contents("php://input"), true);
-        $output = Auth::logout($input['refresh_token']);
-        echo json_encode($output);
+        if ($method !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['error' => 'Method not allowed']);
+            exit;
+        }
+
+        $token = Auth::getBearerToken();
+        if (!$token || !($decoded = Auth::verify($token))) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Unauthorized']);
+            exit;
+        }
+
+        try {
+            $orm = new ORM();
+            $orm->update('refresh_tokens', ['revoked' => 1], ['user_id' => $decoded['user_id'], 'revoked' => 0]);
+            echo json_encode(['message' => 'Logged out successfully']);
+        } catch (Exception $e) {
+            error_log('Auth: Logout failed: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['error' => 'Failed to log out']);
+        }
         break;
 
     default:
