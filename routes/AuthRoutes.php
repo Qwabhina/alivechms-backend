@@ -1,5 +1,12 @@
 <?php
 // === FILE: AuthRoutes.php ===
+
+if ($_SERVER["REQUEST_METHOD"] !== 'POST') {
+    http_response_code(405);
+    echo json_encode(['error' => 'Method not allowed']);
+    exit;
+}
+
 switch ($path) {
     case 'auth/login':
         $input = json_decode(file_get_contents("php://input"), true);
@@ -7,40 +14,7 @@ switch ($path) {
         echo json_encode($output);
         break;
 
-    case 'secure/user-data':
-        $user = Auth::verify(Auth::getBearerToken());
-        if (!$user) {
-            http_response_code(401);
-            echo json_encode(['error' => 'Unauthorized']);
-            break;
-        }
-        echo json_encode(['message' => 'Secure content', 'user' => $user]);
-        break;
-
-    case 'secure/role-check':
-        $user = Auth::verify(Auth::getBearerToken());
-        if (!$user) {
-            http_response_code(401);
-            echo json_encode(['error' => 'Unauthorized']);
-            break;
-        }
-
-        $input = json_decode(file_get_contents("php://input"), true);
-        if (!in_array($user->role, $input['roles'] ?? [])) {
-            http_response_code(403);
-            echo json_encode(['error' => 'Forbidden']);
-            break;
-        }
-
-        echo json_encode(['message' => 'Access granted', 'role' => $user->role]);
-        break;
     case 'auth/refresh':
-        if ($_SERVER["REQUEST_METHOD"] !== 'POST') {
-            http_response_code(405);
-            echo json_encode(['error' => 'Method not allowed']);
-            exit;
-        }
-
         $data = json_decode(file_get_contents('php://input'), true);
         $refreshToken = $data['refresh_token'] ?? '';
 
@@ -60,12 +34,6 @@ switch ($path) {
         break;
 
     case 'auth/logout':
-        if ($method !== 'POST') {
-            http_response_code(405);
-            echo json_encode(['error' => 'Method not allowed']);
-            exit;
-        }
-
         $token = Auth::getBearerToken();
         if (!$token || !($decoded = Auth::verify($token))) {
             http_response_code(401);
