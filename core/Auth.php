@@ -17,8 +17,6 @@ class Auth
         if (!self::$secretKey) {
             self::$secretKey = $_ENV['JWT_SECRET'] ?: 'default-access-secret';
             self::$refreshSecretKey = $_ENV['JWT_REFRESH_SECRET'] ?: 'default-refresh-secret';
-            // self::$secretKey = getenv('JWT_SECRET') ?: 'default-access-secret';
-            // self::$refreshSecretKey = getenv('JWT_REFRESH_SECRET') ?: 'default-refresh-secret';
         }
     }
 
