@@ -1,81 +1,122 @@
 <?php
+require_once __DIR__ . '/../core/Auth.php';
+require_once __DIR__ . '/../core/Member.php';
+require_once __DIR__ . '/../core/Helpers.php';
 
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    http_response_code(405);
-    echo json_encode(['error' => 'Method not allowed']);
-    exit;
-}
+$method = $_SERVER['REQUEST_METHOD'];
 $token = Auth::getBearerToken();
+$pathParts = explode('/', trim($path, '/'));
+
 if (!$token || !Auth::verify($token)) {
-    http_response_code(401);
-    echo json_encode(['error' => 'Unauthorized']);
-    exit;
+    Helpers::sendError('Unauthorized', 401);
 }
 
-switch ($path) {
-    case 'member/recent':
+switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
+    case 'GET member/recent':
+        Auth::checkPermission($token, 'view_members');
         $orm = new ORM();
         $members = $orm->selectWithJoin(
-            baseTable: 'churchmember',
-            conditions: ['MbrMembershipStatus' => ':status'],
+            baseTable: 'churchmember c',
+            joins: [
+                ['table' => 'member_phone p', 'on' => 'c.MbrID = p.MbrID', 'type' => 'LEFT OUTER'],
+                ['table' => 'userauthentication u', 'on' => 'c.MbrID = u.MbrID', 'type' => 'LEFT OUTER']
+            ],
+            fields: ['c.*', 'GROUP_CONCAT(p.PhoneNumber) as PhoneNumbers', 'u.Username', 'u.LastLoginAt'],
+            conditions: ['c.MbrMembershipStatus' => ':status'],
             params: [':status' => 'Active'],
-            orderBy: ['MbrRegistrationDate' => 'DESC'],
+            orderBy: ['c.MbrRegistrationDate' => 'DESC'],
+            groupBy: ['c.MbrID'],
             limit: 10
         );
 
-        $formattedMembers = array_map(function ($member) {
-            return [
-                'MbrCustomID' => $member['MbrCustomID'],
-                'MbrFirstName' => $member['MbrFirstName'],
-                'MbrFamilyName' => $member['MbrFamilyName'],
-                'MbrRegistrationDate' => $member['MbrRegistrationDate'],
-                'MbrMembershipStatus' => $member['MbrMembershipStatus'],
-                'MbrOtherNames' => $member['MbrOtherNames'] ?? '',
-                'MbrGender' => $member['MbrGender'] ?? 'Male',
-                'MbrPhoneNumbers' => $member['MbrPhoneNumbers'] ?? '',
-                'MbrEmailAddress' => $member['MbrEmailAddress'] ?? '',
-                'MbrResidentialAddress' => $member['MbrResidentialAddress'] ?? '',
-                'MbrDateOfBirth' => $member['MbrDateOfBirth'] ?? '0000-00-00',
-                'MbrOccupation' => $member['MbrOccupation'] ?? 'Not Applicable',
-                'BranchID' => $member['BranchID'] ?? 1,
-                'Username' => $member['Username'] ?? '',
-                'LastLoginAt' => $member['LastLoginAt'] ?? '0000-00-00 00:00:00'
-            ];
-        }, $members);
-
-        echo json_encode($formattedMembers);
+        echo json_encode($members);
         break;
 
-    case 'member/all':
-
+    case 'GET member/all':
+        Auth::checkPermission($token, 'view_members');
         $orm = new ORM();
-        $members = $orm->getWhere('churchmember', ['MbrMembershipStatus' => 'Active']);
+        $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+        $limit = isset($_GET['limit']) ? max(1, min(100, intval($_GET['limit']))) : 10;
+        $offset = ($page - 1) * $limit;
 
-        $formattedMembers = array_map(function ($member) {
-            return [
-                'MbrCustomID' => $member['MbrCustomID'],
-                'MbrFirstName' => $member['MbrFirstName'],
-                'MbrFamilyName' => $member['MbrFamilyName'],
-                'MbrRegistrationDate' => $member['MbrRegistrationDate'],
-                'MbrMembershipStatus' => $member['MbrMembershipStatus'],
-                'MbrOtherNames' => $member['MbrOtherNames'] ?? '',
-                'MbrGender' => $member['MbrGender'] ?? 'Male',
-                'MbrPhoneNumbers' => $member['MbrPhoneNumbers'] ?? '',
-                'MbrEmailAddress' => $member['MbrEmailAddress'] ?? '',
-                'MbrResidentialAddress' => $member['MbrResidentialAddress'] ?? '',
-                'MbrDateOfBirth' => $member['MbrDateOfBirth'] ?? '0000-00-00',
-                'MbrOccupation' => $member['MbrOccupation'] ?? 'Not Applicable',
-                'BranchID' => $member['BranchID'] ?? 1,
-                'Username' => '',
-                'LastLoginAt' => ''
-            ];
-        }, $members);
+        $members = $orm->selectWithJoin(
+            baseTable: 'churchmember c',
+            joins: [['table' => 'member_phone p', 'on' => 'c.MbrID = p.MbrID', 'type' => 'LEFT']],
+            fields: ['c.*', 'GROUP_CONCAT(p.PhoneNumber) as PhoneNumbers'],
+            conditions: ['c.MbrMembershipStatus' => ':status'],
+            params: [':status' => 'Active'],
+            groupBy: ['c.MbrID'],
+            limit: $limit,
+            offset: $offset
+        );
 
-        echo json_encode($formattedMembers);
+        $total = $orm->runQuery("SELECT COUNT(*) as total FROM churchmember WHERE MbrMembershipStatus = 'Active'")[0]['total'];
+        echo json_encode([
+            'data' => $members,
+            'pagination' => [
+                'page' => $page,
+                'limit' => $limit,
+                'total' => $total,
+                'pages' => ceil($total / $limit)
+            ]
+        ]);
+        break;
+
+    case 'POST member/create':
+        Auth::checkPermission($token, 'edit_members');
+        $input = json_decode(file_get_contents('php://input'), true);
+        try {
+            $result = Member::register($input);
+            echo json_encode($result);
+        } catch (Exception $e) {
+            Helpers::sendError($e->getMessage(), 400);
+        }
+        break;
+
+    case 'PUT member/update':
+        Auth::checkPermission($token, 'edit_members');
+        $input = json_decode(file_get_contents('php://input'), true);
+        $mbrId = $pathParts[2] ?? null;
+        if (!$mbrId) {
+            Helpers::sendError('Member ID required', 400);
+        }
+        try {
+            $result = Member::update($mbrId, $input);
+            echo json_encode($result);
+        } catch (Exception $e) {
+            Helpers::sendError($e->getMessage(), 400);
+        }
+        break;
+
+    case 'DELETE member/delete':
+        Auth::checkPermission($token, 'edit_members');
+        $mbrId = $pathParts[2] ?? null;
+        if (!$mbrId) {
+            Helpers::sendError('Member ID required', 400);
+        }
+        try {
+            $result = Member::delete($mbrId);
+            echo json_encode($result);
+        } catch (Exception $e) {
+            Helpers::sendError($e->getMessage(), 400);
+        }
+        break;
+
+    case 'GET member/view':
+        Auth::checkPermission($token, 'view_members');
+        $mbrId = $pathParts[2] ?? null;
+        if (!$mbrId) {
+            Helpers::sendError('Member ID required', 400);
+        }
+        try {
+            $member = Member::get($mbrId);
+            echo json_encode($member);
+        } catch (Exception $e) {
+            Helpers::sendError($e->getMessage(), 404);
+        }
         break;
 
     default:
-        http_response_code(404);
-        echo json_encode(['error' => 'Endpoint not found']);
-        exit;
+        Helpers::sendError('Endpoint not found', 404);
 }
+?>
