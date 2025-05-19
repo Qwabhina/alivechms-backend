@@ -34,7 +34,6 @@ class Helpers
         header('Access-Control-Allow-Headers: Authorization, Content-Type');
     }
 
-
     public static function logError($message)
     {
         if (!file_exists($_SERVER['DOCUMENT_ROOT'] . "/logs/app.log")) {

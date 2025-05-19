@@ -339,7 +339,7 @@ class Expense
             ]
          ];
       } catch (Exception $e) {
-         Helpers::logError('Expense getAll error: ' . $e->getMessage());
+         Helpers::logError('Expense::getAll error: ' . $e->getMessage());
          throw $e;
       }
    }
