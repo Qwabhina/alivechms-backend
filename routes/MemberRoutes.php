@@ -14,6 +14,7 @@ if (!$token || !Auth::verify($token)) {
 switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
     case 'GET member/recent':
         Auth::checkPermission($token, 'view_members');
+
         $orm = new ORM();
         $members = $orm->selectWithJoin(
             baseTable: 'churchmember c',
@@ -30,6 +31,7 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
         );
 
         echo json_encode($members);
+
         break;
 
     case 'GET member/all':
@@ -51,6 +53,7 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
         );
 
         $total = $orm->runQuery("SELECT COUNT(*) as total FROM churchmember WHERE MbrMembershipStatus = 'Active'")[0]['total'];
+
         echo json_encode([
             'data' => $members,
             'pagination' => [
@@ -64,6 +67,7 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
 
     case 'POST member/create':
         Auth::checkPermission($token, 'edit_members');
+
         $input = json_decode(file_get_contents('php://input'), true);
         try {
             $result = Member::register($input);
@@ -75,21 +79,25 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
 
     case 'PUT member/update':
         Auth::checkPermission($token, 'edit_members');
+
         $input = json_decode(file_get_contents('php://input'), true);
         $mbrId = $pathParts[2] ?? null;
         if (!$mbrId) {
             Helpers::sendError('Member ID required', 400);
         }
+
         try {
             $result = Member::update($mbrId, $input);
             echo json_encode($result);
         } catch (Exception $e) {
             Helpers::sendError($e->getMessage(), 400);
         }
+
         break;
 
-    case 'DELETE member/delete':
+    case "DELETE member/delete":
         Auth::checkPermission($token, 'edit_members');
+
         $mbrId = $pathParts[2] ?? null;
         if (!$mbrId) {
             Helpers::sendError('Member ID required', 400);
