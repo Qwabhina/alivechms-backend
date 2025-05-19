@@ -3,7 +3,6 @@ require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/ORM.php';
 require_once __DIR__ . '/Helpers.php';
 
-
 class Expense
 {
    public static function create($data)
@@ -80,7 +79,9 @@ class Expense
          $orm->commit();
          return ['status' => 'success', 'expense_id' => $expenseId];
       } catch (Exception $e) {
-         $orm->rollBack();
+         if ($orm->in_transaction()) {
+            $orm->rollBack();
+         }
          Helpers::logError('Expense create error: ' . $e->getMessage());
          throw $e;
       }
@@ -137,7 +138,9 @@ class Expense
          $orm->commit();
          return ['status' => 'success', 'expense_id' => $expenseId];
       } catch (Exception $e) {
-         $orm->rollBack();
+         if ($orm->in_transaction()) {
+            $orm->rollBack();
+         }
          Helpers::logError('Expense update error: ' . $e->getMessage());
          throw $e;
       }
@@ -161,7 +164,9 @@ class Expense
          $orm->commit();
          return ['status' => 'success'];
       } catch (Exception $e) {
-         $orm->rollBack();
+         if ($orm->in_transaction()) {
+            $orm->rollBack();
+         }
          Helpers::logError('Expense delete error: ' . $e->getMessage());
          throw $e;
       }
@@ -210,9 +215,17 @@ class Expense
    public static function approve($expenseId, $approverId, $status, $comments = null)
    {
       $orm = new ORM();
+      $transactionStarted = false;
       try {
+         // Validate inputs
          if (!in_array($status, ['Approved', 'Declined'])) {
             throw new Exception('Invalid approval status');
+         }
+         if (!is_numeric($expenseId) || $expenseId <= 0) {
+            throw new Exception('Invalid expense ID');
+         }
+         if (!is_numeric($approverId) || $approverId <= 0) {
+            throw new Exception('Invalid approver ID');
          }
 
          // Validate expense exists and is pending
@@ -231,6 +244,8 @@ class Expense
          }
 
          $orm->beginTransaction();
+         $transactionStarted = true;
+
          $orm->update('expense', [
             'ExpStatus' => $status
          ], ['ExpID' => $expenseId]);
@@ -258,7 +273,9 @@ class Expense
          $orm->commit();
          return ['status' => 'success', 'expense_id' => $expenseId];
       } catch (Exception $e) {
-         $orm->rollBack();
+         if ($transactionStarted && $orm->in_transaction()) {
+            $orm->rollBack();
+         }
          Helpers::logError('Expense approval error: ' . $e->getMessage());
          throw $e;
       }
@@ -385,3 +402,4 @@ class Expense
       }
    }
 }
+?>
