@@ -12,9 +12,11 @@ if (!$token || !Auth::verify($token)) {
 switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
     case 'GET contribution/average':
         Auth::checkPermission($token, 'view_contributions');
+
         $month = $pathParts[3] ?? null;
+
         try {
-            Helpers::validateInput($pathParts, ['month' => 'required']);
+            Helpers::validateInput($pathParts, [2 => 'required']);
 
             if (!preg_match('/^\d{4}-\d{2}$/', $month)) {
                 throw new Exception('Invalid month format (YYYY-MM) ' . $month);
@@ -25,6 +27,7 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
                 'SELECT ContributionAmount FROM contribution WHERE DATE_FORMAT(ContributionDate, "%Y-%m") = :month',
                 ['month' => $month]
             );
+
             $total = array_sum(array_column($contributions, 'ContributionAmount'));
             $count = count($contributions);
             $average = $count ? $total / $count : 0;
@@ -33,10 +36,12 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
         } catch (Exception $e) {
             Helpers::sendError($e->getMessage(), 400);
         }
+
         break;
 
     case 'GET contribution/all':
         Auth::checkPermission($token, 'view_contributions');
+
         $orm = new ORM();
         $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
         $limit = isset($_GET['limit']) ? max(1, min(100, intval($_GET['limit']))) : 10;
@@ -63,6 +68,7 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
                 'pages' => ceil($total / $limit)
             ]
         ]);
+
         break;
 
     default:
