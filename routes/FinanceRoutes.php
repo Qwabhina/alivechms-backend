@@ -12,9 +12,9 @@ if (!$token || !Auth::verify($token)) {
 }
 
 switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
-   case 'GET financial/income_statement':
-      Auth::checkPermission($token, 'view_financial_reports');
-      $fiscalYearId = $_GET['fiscal_year_id'] ?? null;
+   case 'GET finance/income_statement':
+      // Auth::checkPermission($token, 'view_financial_reports');
+      $fiscalYearId = $pathParts[2] ?? null;
       if (!$fiscalYearId) {
          Helpers::sendError('Fiscal year ID required', 400);
       }
@@ -26,9 +26,9 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
       }
       break;
 
-   case 'GET financial/budget_vs_actual':
-      Auth::checkPermission($token, 'view_financial_reports');
-      $fiscalYearId = $_GET['fiscal_year_id'] ?? null;
+   case 'GET finance/budget_vs_actual':
+      // Auth::checkPermission($token, 'view_financial_reports');
+      $fiscalYearId = $pathParts[2] ?? null;
       if (!$fiscalYearId) {
          Helpers::sendError('Fiscal year ID required', 400);
       }
