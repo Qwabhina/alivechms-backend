@@ -59,7 +59,7 @@ class Member
 
             return ['status' => 'success', 'mbr_id' => $mbrId];
         } catch (Exception $e) {
-            file_put_contents(__DIR__ . '/../logs/app.log', date('Y-m-d H:i:s') . ' - Member register error: ' . $e->getMessage() . PHP_EOL, FILE_APPEND);
+            Helpers::logError('Member register error: ' . $e->getMessage());
             throw $e;
         }
     }
@@ -101,7 +101,7 @@ class Member
 
             return ['status' => 'success', 'mbr_id' => $mbrId];
         } catch (Exception $e) {
-            file_put_contents(__DIR__ . '/../logs/app.log', date('Y-m-d H:i:s') . ' - Member update error: ' . $e->getMessage() . PHP_EOL, FILE_APPEND);
+            Helpers::logError('Member update error: ' . $e->getMessage());
             throw $e;
         }
     }
@@ -113,7 +113,7 @@ class Member
             $orm->softDelete('churchmember', $mbrId, 'MbrID');
             return ['status' => 'success'];
         } catch (Exception $e) {
-            file_put_contents(__DIR__ . '/../logs/app.log', date('Y-m-d H:i:s') . ' - Member delete error: ' . $e->getMessage() . PHP_EOL, FILE_APPEND);
+            Helpers::logError('Member delete error: ' . $e->getMessage());
             throw $e;
         }
     }
@@ -138,7 +138,7 @@ class Member
             }
             return $member;
         } catch (Exception $e) {
-            file_put_contents(__DIR__ . '/../logs/app.log', date('Y-m-d H:i:s') . ' - Member get error: ' . $e->getMessage() . PHP_EOL, FILE_APPEND);
+            Helpers::logError('Member get error: ' . $e->getMessage());
             throw $e;
         }
     }
