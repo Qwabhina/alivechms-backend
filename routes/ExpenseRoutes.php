@@ -53,7 +53,7 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
       break;
 
    case 'GET expense/view':
-      Auth::checkPermission($token, 'view_expense');
+      // Auth::checkPermission($token, 'view_expense');
       $expenseId = $pathParts[2] ?? null;
       if (!$expenseId) {
          Helpers::sendError('Expense ID required', 400);
@@ -67,7 +67,7 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
       break;
 
    case 'POST expense/approve':
-      Auth::checkPermission($token, 'approve_expense');
+      // Auth::checkPermission($token, 'approve_expense');
       $expenseId = $pathParts[2] ?? null;
       if (!$expenseId) {
          Helpers::sendError('Expense ID required', 400);
@@ -83,7 +83,7 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
       break;
 
    case 'GET expense/all':
-      Auth::checkPermission($token, 'view_expense');
+      // Auth::checkPermission($token, 'view_expense');
       $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
       $limit = isset($_GET['limit']) ? max(1, min(100, intval($_GET['limit']))) : 10;
       $filters = [];
