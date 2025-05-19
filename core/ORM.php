@@ -11,6 +11,26 @@ class ORM
         $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     }
 
+    public function beginTransaction()
+    {
+        $this->pdo->beginTransaction();
+    }
+
+    public function commit()
+    {
+        $this->pdo->commit();
+    }
+
+    public function rollBack()
+    {
+        $this->pdo->rollBack();
+    }
+
+    public function in_transaction()
+    {
+        return $this->pdo->inTransaction();
+    }
+
     public function getAll(string $table)
     {
         $stmt = $this->pdo->query("SELECT * FROM `$table`");
@@ -51,7 +71,6 @@ class ORM
         $setClause = implode(', ', array_map(fn($k) => "`$k` = :$k", array_keys($data)));
         $whereClause = implode(' AND ', array_map(fn($k) => "`$k` = :cond_$k", array_keys($conditions)));
 
-        // Rename condition keys to avoid conflicts with data keys
         $params = array_merge(
             $data,
             array_combine(
@@ -77,9 +96,10 @@ class ORM
 
     public function softDelete(string $table, $value, $column = 'id')
     {
-        $sql = "UPDATE `$table` SET deleted_at = NOW() WHERE `$column` = :id";
+        $sql = "UPDATE `$table` SET `Deleted` = 1 WHERE `$column` = :id";
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute(['id' => $value]);
+        Helpers::logError("Deleted Member with ID $value");
         return ['rows_affected' => $stmt->rowCount()];
     }
 
@@ -97,13 +117,13 @@ class ORM
         array $conditions = [],
         array $params = [],
         array $orderBy = [],
+        array $groupBy = [],
         int $limit = 0,
         int $offset = 0
     ): array {
         $select = implode(', ', $fields);
         $sql = "SELECT {$select} FROM {$baseTable}";
 
-        // JOIN clauses
         foreach ($joins as $join) {
             $type = strtoupper($join['type'] ?? 'INNER');
             $table = $join['table'];
@@ -111,16 +131,22 @@ class ORM
             $sql .= " {$type} JOIN {$table} ON {$on}";
         }
 
-        // WHERE clause
         if (!empty($conditions)) {
             $where = [];
             foreach ($conditions as $column => $placeholder) {
-                $where[] = "{$column} = {$placeholder}";
+                if (is_null($placeholder)) {
+                    $where[] = $column;
+                } else {
+                    $where[] = "{$column} = {$placeholder}";
+                }
             }
             $sql .= ' WHERE ' . implode(' AND ', $where);
         }
 
-        // ORDER BY
+        if (!empty($groupBy)) {
+            $sql .= ' GROUP BY ' . implode(', ', $groupBy);
+        }
+
         if (!empty($orderBy)) {
             $orderClauses = [];
             foreach ($orderBy as $column => $direction) {
@@ -130,7 +156,6 @@ class ORM
             $sql .= ' ORDER BY ' . implode(', ', $orderClauses);
         }
 
-        // LIMIT and OFFSET
         if ($limit > 0) {
             $sql .= " LIMIT {$limit}";
             if ($offset > 0) {
@@ -138,9 +163,8 @@ class ORM
             }
         }
 
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($params);
-
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $stmt = self::runQuery($sql, $params);
+        return $stmt;
     }
 }
+?>

@@ -1,34 +1,146 @@
 <?php
 require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/ORM.php';
-
-use Firebase\JWT\JWT;
+require_once __DIR__ . '/Helpers.php';
 
 class Member
 {
     public static function register($data)
     {
         $orm = new ORM();
-        $username = $data['username'];
-        $password = password_hash($data['password'], PASSWORD_BCRYPT);
-        $email = $data['email'];
+        try {
+            Helpers::validateInput($data, [
+                'first_name' => 'required',
+                'family_name' => 'required',
+                'email_address' => 'required|email',
+                'username' => 'required',
+                'password' => 'required'
+            ]);
 
-        // Check if username or email already exists
-        $existingUser = $orm->getWhere('userauthentication', ['username' => $username, 'email' => $email]);
-        if ($existingUser) {
-            throw new Exception("Username or email already exists.");
+            $existing = $orm->getWhere('userauthentication', ['Username' => $data['username']]);
+            if ($existing) {
+                throw new Exception('Username already exists');
+            }
+
+            $mbrId = $orm->insert('churchmember', [
+                'MbrFirstName' => $data['first_name'],
+                'MbrFamilyName' => $data['family_name'],
+                'MbrOtherNames' => $data['other_names'] ?? null,
+                'MbrGender' => $data['gender'] ?? 'Male',
+                'MbrEmailAddress' => $data['email_address'],
+                'MbrResidentialAddress' => $data['address'] ?? null,
+                'MbrDateOfBirth' => $data['date_of_birth'] ?? null,
+                'MbrOccupation' => $data['occupation'] ?? 'Not Applicable',
+                'MbrRegistrationDate' => date('Y-m-d'),
+                'MbrMembershipStatus' => 'Active',
+                'BranchID' => $data['branch_id'] ?? 1,
+                'FamilyID' => $data['family_id'] ?? null
+            ])['id'];
+
+            if (!empty($data['phone_numbers'])) {
+                foreach ($data['phone_numbers'] as $phone) {
+                    $orm->insert('member_phone', [
+                        'MbrID' => $mbrId,
+                        'PhoneNumber' => $phone
+                    ]);
+                }
+            }
+
+            $orm->insert('userauthentication', [
+                'MbrID' => $mbrId,
+                'Username' => $data['username'],
+                'PasswordHash' => password_hash($data['password'], PASSWORD_BCRYPT)
+            ]);
+
+            $orm->insert('memberrole', [
+                'MbrID' => $mbrId,
+                'ChurchRoleID' => 6 // Default: Member
+            ]);
+
+            return ['status' => 'success', 'mbr_id' => $mbrId];
+        } catch (Exception $e) {
+            Helpers::logError('Member register error: ' . $e->getMessage());
+            throw $e;
         }
+    }
 
-        // Insert new user
-        $userId = $orm->insert('userauthentication', [
-            'username' => $username,
-            'password' => $password,
-            'email' => $email,
-        ]);
+    public static function update($mbrId, $data)
+    {
+        $orm = new ORM();
+        try {
+            Helpers::validateInput($data, [
+                'first_name' => 'required',
+                'family_name' => 'required',
+                'email_address' => 'required|email'
+            ]);
 
-        return [
-            'status' => 'success',
-            'user_id' => $userId,
-        ];
+            $updateData = [
+                'MbrFirstName' => $data['first_name'],
+                'MbrFamilyName' => $data['family_name'],
+                'MbrOtherNames' => $data['other_names'] ?? null,
+                'MbrGender' => $data['gender'] ?? 'Male',
+                'MbrEmailAddress' => $data['email_address'],
+                'MbrResidentialAddress' => $data['address'] ?? null,
+                'MbrDateOfBirth' => $data['date_of_birth'] ?? null,
+                'MbrOccupation' => $data['occupation'] ?? 'Not Applicable',
+                'BranchID' => $data['branch_id'] ?? 1,
+                'FamilyID' => $data['family_id'] ?? null
+            ];
+
+            $orm->update('churchmember', $updateData, ['MbrID' => $mbrId]);
+
+            if (!empty($data['phone_numbers'])) {
+                $orm->delete('member_phone', ['MbrID' => $mbrId]);
+                foreach ($data['phone_numbers'] as $phone) {
+                    $orm->insert('member_phone', [
+                        'MbrID' => $mbrId,
+                        'PhoneNumber' => $phone
+                    ]);
+                }
+            }
+
+            return ['status' => 'success', 'mbr_id' => $mbrId];
+        } catch (Exception $e) {
+            Helpers::logError('Member update error: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    public static function delete($mbrId)
+    {
+        $orm = new ORM();
+        try {
+            $orm->softDelete('churchmember', $mbrId, 'MbrID');
+            return ['status' => 'success'];
+        } catch (Exception $e) {
+            Helpers::logError('Member delete error: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    public static function get($mbrId)
+    {
+        $orm = new ORM();
+        try {
+            $member = $orm->selectWithJoin(
+                baseTable: 'churchmember c',
+                joins: [
+                    ['table' => 'member_phone p', 'on' => 'c.MbrID = p.MbrID', 'type' => 'LEFT'],
+                    ['table' => 'family f', 'on' => 'c.FamilyID = f.FamilyID', 'type' => 'LEFT']
+                ],
+                fields: ['c.*', 'GROUP_CONCAT(p.PhoneNumber) as PhoneNumbers', 'f.FamilyName'],
+                conditions: ['c.MbrID' => ':id', 'c.Deleted' => 0],
+                params: [':id' => $mbrId]
+            )[0] ?? null;
+
+            if (!$member) {
+                throw new Exception('Member not found');
+            }
+            return $member;
+        } catch (Exception $e) {
+            Helpers::logError('Member get error: ' . $e->getMessage());
+            throw $e;
+        }
     }
 }
+?>
