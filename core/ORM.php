@@ -26,6 +26,11 @@ class ORM
         $this->pdo->rollBack();
     }
 
+    public function in_transaction()
+    {
+        return $this->pdo->inTransaction();
+    }
+
     public function getAll(string $table)
     {
         $stmt = $this->pdo->query("SELECT * FROM `$table`");
