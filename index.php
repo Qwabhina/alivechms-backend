@@ -28,10 +28,6 @@ try {
         'member' => 'MemberRoutes.php',
         'family' => 'FamilyRoutes.php',
         'dashboard' => 'DashboardRoutes.php',
-        'paginate' => 'PaginationRoutes.php',
-        'soft-delete' => 'PaginationRoutes.php',
-        'upload' => 'UploadRoutes.php',
-        'download' => 'FileRoutes.php',
     ];
 
     if (!array_key_exists($section, $routes)) {
