@@ -451,6 +451,76 @@ class Event
                $sql .= " GROUP BY m.MbrID";
                break;
 
+            case 'attendance_by_member':
+               $sql = "SELECT m.MbrFirstName, m.MbrFamilyName, 
+                            COUNT(ea.AttendanceID) as total_events, 
+                            SUM(CASE WHEN ea.AttendanceStatus = 'Present' THEN 1 ELSE 0 END) as present_count,
+                            SUM(CASE WHEN ea.AttendanceStatus = 'Absent' THEN 1 ELSE 0 END) as absent_count,
+                            SUM(CASE WHEN ea.AttendanceStatus = 'Excused' THEN 1 ELSE 0 END) as excused_count
+                            FROM churchmember m 
+                            LEFT JOIN eventattendance ea ON m.MbrID = ea.MbrID
+                            LEFT JOIN churchevent e ON ea.EventID = e.EventID";
+               if (!empty($filters['branch_id']) && is_numeric($filters['branch_id'])) {
+                  $sql .= " WHERE e.BranchID = :branch_id";
+                  $params[':branch_id'] = $filters['branch_id'];
+               }
+               if (!empty($filters['date_from'])) {
+                  $sql .= (!empty($params) ? ' AND' : ' WHERE') . " e.EventDateTime >= :date_from";
+                  $params[':date_from'] = $filters['date_from'];
+               }
+               if (!empty($filters['date_to'])) {
+                  $sql .= (!empty($params) ? ' AND' : ' WHERE') . " e.EventDateTime <= :date_to";
+                  $params[':date_to'] = $filters['date_to'];
+               }
+               $sql .= " GROUP BY m.MbrID";
+               break;
+
+            case 'participation_by_branch':
+               $sql = "SELECT b.BranchName, 
+                            COUNT(DISTINCT e.EventID) as total_events, 
+                            COUNT(ea.AttendanceID) as total_attendees, 
+                            COUNT(v.VolunteerID) as total_volunteers
+                            FROM branch b 
+                            LEFT JOIN churchevent e ON b.BranchName = e.Location
+                            LEFT JOIN eventattendance ea ON e.EventID = ea.EventID
+                            LEFT JOIN volunteer v ON e.EventID = v.EventID";
+
+               if (!empty($filters['event_name'])) {
+                  $sql .= " WHERE e.EventName LIKE :event_name";
+                  $params[':event_name'] = '' . trim($filters['event_name']) . '%';
+               }
+               if (!empty($filters['date_from'])) {
+                  $sql .= (!empty($params) ? ' AND' : ' WHERE') . " e.EventDate >= :date_from";
+                  $params[':date_from'] = $filters['date_from'];
+               }
+               if (!empty($filters['date_to'])) {
+                  $sql .= (!empty($params) ? ' AND' : ' WHERE') . " e.EventDate <= :date_to";
+                  $params[':date_to'] = $filters['date_to'];
+               }
+               $sql .= " GROUP BY b.BranchID";
+               break;
+
+            case 'volunteer_role_distribution':
+               $sql = "SELECT v.Role, 
+                            COUNT(v.VolunteerID) as total_assignments, 
+                            COUNT(DISTINCT v.MbrID) as unique_volunteers
+                            FROM volunteer v 
+                            JOIN churchevent e ON v.EventID = e.EventID";
+               if (!empty($filters['branch_id']) && is_numeric($filters['branch_id'])) {
+                  $sql .= " WHERE e.BranchID = :branch_id";
+                  $params[':branch_id'] = $filters['branch_id'];
+               }
+               if (!empty($filters['date_from'])) {
+                  $sql .= (!empty($params) ? ' AND' : ' WHERE') . " e.EventDateTime >= :date_from";
+                  $params[':date_from'] = $filters['date_from'];
+               }
+               if (!empty($filters['date_to'])) {
+                  $sql .= (!empty($params) ? ' AND' : ' WHERE') . " e.EventDateTime <= :date_to";
+                  $params[':date_to'] = $filters['date_to'];
+               }
+               $sql .= " GROUP BY v.Role";
+               break;
+
             default:
                throw new Exception('Invalid report type');
          }
