@@ -172,6 +172,38 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
       }
       break;
 
+   case 'POST event/bulk-attendance':
+      Auth::checkPermission($token, 'manage_attendance');
+      $eventId = $pathParts[2] ?? null;
+      if (!$eventId) {
+         Helpers::sendError('Event ID required', 400);
+      }
+      $input = json_decode(file_get_contents('php://input'), true);
+      try {
+         $result = Event::bulkAttendance($eventId, $input);
+         echo json_encode($result);
+      } catch (Exception $e) {
+         Helpers::sendError($e->getMessage(), 400);
+      }
+      break;
+
+   case 'POST event/self-attendance':
+      Auth::checkPermission($token, 'record_own_attendance');
+      $eventId = $pathParts[2] ?? null;
+      if (!$eventId) {
+         Helpers::sendError('Event ID required', 400);
+      }
+      $input = json_decode(file_get_contents('php://input'), true);
+      try {
+         $decoded = Auth::verify($token);
+         $result = Event::selfAttendance($eventId, $input['status'], $decoded['user_id']);
+         echo json_encode($result);
+      } catch (Exception $e) {
+         Helpers::sendError($e->getMessage(), 400);
+      }
+      break;
+
+   // DEFAULT BEHAVIOR
    default:
       Helpers::sendError('Endpoint not found', 404);
 }
