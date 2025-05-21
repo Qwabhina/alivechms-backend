@@ -306,12 +306,6 @@ class Event
       $orm = new ORM();
       $transactionStarted = false;
       try {
-         // Validate role
-         $validRoles = ['Usher', 'Greeter', 'Worship Leader', 'Tech Support'];
-         if (!in_array($role, $validRoles)) {
-            throw new Exception('Invalid volunteer role');
-         }
-
          // Validate event exists
          $event = $orm->getWhere('churchevent', ['EventID' => $eventId]);
          if (empty($event)) {
