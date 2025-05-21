@@ -152,7 +152,8 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
 
    case 'GET event/report':
       Auth::checkPermission($token, 'view_event');
-      $type = $_GET['type'] ?? null;
+      $type = $pathParts[2] ?? null;
+
       if (!$type) {
          Helpers::sendError('Report type required', 400);
       }
