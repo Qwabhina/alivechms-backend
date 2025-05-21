@@ -161,6 +161,9 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
       if (isset($_GET['date_from'])) {
          $filters['date_from'] = $_GET['date_from'];
       }
+      // if (isset($_GET['branch_id'])) {
+      //    $filters['branch_id'] = $_GET['branch_id'];
+      // }
       if (isset($_GET['date_to'])) {
          $filters['date_to'] = $_GET['date_to'];
       }

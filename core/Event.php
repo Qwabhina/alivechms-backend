@@ -500,26 +500,28 @@ class Event
                $sql .= " GROUP BY b.BranchID";
                break;
 
-            case 'volunteer_role_distribution':
-               $sql = "SELECT v.Role, 
-                            COUNT(v.VolunteerID) as total_assignments, 
-                            COUNT(DISTINCT v.MbrID) as unique_volunteers
-                            FROM volunteer v 
-                            JOIN churchevent e ON v.EventID = e.EventID";
-               if (!empty($filters['branch_id']) && is_numeric($filters['branch_id'])) {
-                  $sql .= " WHERE e.BranchID = :branch_id";
-                  $params[':branch_id'] = $filters['branch_id'];
-               }
-               if (!empty($filters['date_from'])) {
-                  $sql .= (!empty($params) ? ' AND' : ' WHERE') . " e.EventDateTime >= :date_from";
-                  $params[':date_from'] = $filters['date_from'];
-               }
-               if (!empty($filters['date_to'])) {
-                  $sql .= (!empty($params) ? ' AND' : ' WHERE') . " e.EventDateTime <= :date_to";
-                  $params[':date_to'] = $filters['date_to'];
-               }
-               $sql .= " GROUP BY v.Role";
-               break;
+            // case 'volunteer_role_distribution':
+            //    $sql = "SELECT v.Role, 
+            //                 COUNT(v.VolunteerID) as total_assignments, 
+            //                 COUNT(DISTINCT v.MbrID) as unique_volunteers
+            //                 FROM volunteer v 
+            //                 JOIN churchevent e ON v.EventID = e.EventID
+            //                 JOIN branch b ON e.BranchID = b.BranchID";
+
+            //    if (!empty($filters['branch_id']) && is_numeric($filters['branch_id'])) {
+            //       $sql .= " WHERE e.BranchID = :branch_id";
+            //       $params[':branch_id'] = $filters['branch_id'];
+            //    }
+            //    if (!empty($filters['date_from'])) {
+            //       $sql .= (!empty($params) ? ' AND' : ' WHERE') . " e.EventDateTime >= :date_from";
+            //       $params[':date_from'] = $filters['date_from'];
+            //    }
+            //    if (!empty($filters['date_to'])) {
+            //       $sql .= (!empty($params) ? ' AND' : ' WHERE') . " e.EventDateTime <= :date_to";
+            //       $params[':date_to'] = $filters['date_to'];
+            //    }
+            //    $sql .= " GROUP BY v.Role";
+            //    break;
 
             default:
                throw new Exception('Invalid report type');
