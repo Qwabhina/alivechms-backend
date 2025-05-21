@@ -462,4 +462,92 @@ class Event
          throw $e;
       }
    }
+
+   public static function bulkAttendance($eventId, $attendances)
+   {
+      $orm = new ORM();
+      $transactionStarted = false;
+      try {
+         $event = $orm->getWhere('churchevent', ['EventID' => $eventId]);
+         if (empty($event)) {
+            throw new Exception('Event not found');
+         }
+         $orm->beginTransaction();
+         $transactionStarted = true;
+         foreach ($attendances as $attendance) {
+            if (!in_array($attendance['status'], ['Present', 'Absent', 'Excused'])) {
+               throw new Exception('Invalid attendance status for member ' . $attendance['member_id']);
+            }
+            $member = $orm->getWhere('churchmember', ['MbrID' => $attendance['member_id'], 'Deleted' => 0]);
+            if (empty($member)) {
+               throw new Exception('Invalid member ID: ' . $attendance['member_id']);
+            }
+            $existing = $orm->getWhere('eventattendance', ['EventID' => $eventId, 'MbrID' => $attendance['member_id']]);
+            if (!empty($existing)) {
+               $orm->update('eventattendance', [
+                  'AttendanceStatus' => $attendance['status'],
+                  'AttendanceDate' => date('Y-m-d H:i:s')
+               ], ['EventID' => $eventId, 'MbrID' => $attendance['member_id']]);
+            } else {
+               $orm->insert('eventattendance', [
+                  'EventID' => $eventId,
+                  'MbrID' => $attendance['member_id'],
+                  'AttendanceStatus' => $attendance['status'],
+                  'AttendanceDate' => date('Y-m-d H:i:s')
+               ]);
+            }
+         }
+         $orm->commit();
+         return ['status' => 'success', 'event_id' => $eventId, 'count' => count($attendances)];
+      } catch (Exception $e) {
+         if ($transactionStarted && $orm->in_transaction()) {
+            $orm->rollBack();
+         }
+         Helpers::logError('Bulk attendance error: ' . $e->getMessage());
+         throw $e;
+      }
+   }
+
+   public static function selfAttendance($eventId, $status, $userId)
+   {
+      $orm = new ORM();
+      $transactionStarted = false;
+      try {
+         if (!in_array($status, ['Present', 'Absent', 'Excused'])) {
+            throw new Exception('Invalid attendance status');
+         }
+         $event = $orm->getWhere('churchevent', ['EventID' => $eventId]);
+         if (empty($event)) {
+            throw new Exception('Event not found');
+         }
+         $member = $orm->getWhere('churchmember', ['MbrID' => $userId, 'Deleted' => 0]);
+         if (empty($member)) {
+            throw new Exception('Invalid member ID');
+         }
+         $orm->beginTransaction();
+         $transactionStarted = true;
+         $existing = $orm->getWhere('eventattendance', ['EventID' => $eventId, 'MbrID' => $userId]);
+         if (!empty($existing)) {
+            $orm->update('eventattendance', [
+               'AttendanceStatus' => $status,
+               'AttendanceDate' => date('Y-m-d H:i:s')
+            ], ['EventID' => $eventId, 'MbrID' => $userId]);
+         } else {
+            $orm->insert('eventattendance', [
+               'EventID' => $eventId,
+               'MbrID' => $userId,
+               'AttendanceStatus' => $status,
+               'AttendanceDate' => date('Y-m-d H:i:s')
+            ]);
+         }
+         $orm->commit();
+         return ['status' => 'success', 'event_id' => $eventId, 'member_id' => $userId];
+      } catch (Exception $e) {
+         if ($transactionStarted && $orm->in_transaction()) {
+            $orm->rollBack();
+         }
+         Helpers::logError('Self attendance error: ' . $e->getMessage());
+         throw $e;
+      }
+   }
 }
