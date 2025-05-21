@@ -41,7 +41,7 @@ class Event
          $eventId = $orm->insert('churchevent', [
             'EventName' => $data['name'],
             'EventDescription' => $data['description'] ?? null,
-            'EventDate' => $data['date'],
+            'EventDateTime' => $data['date'],
             'EventTime' => $data['time'] ?? null,
             'Location' => $data['location'] ?? null,
             'BranchID' => $data['branch_id'],
@@ -419,16 +419,16 @@ class Event
 
          switch ($type) {
             case 'attendance_by_event':
-               $sql = "SELECT e.EventName, e.EventDate, COUNT(ea.AttendanceID) as total_attendees, 
+               $sql = "SELECT e.EventName, e.EventDateTime, COUNT(ea.AttendanceID) as total_attendees, 
                             SUM(CASE WHEN ea.AttendanceStatus = 'Present' THEN 1 ELSE 0 END) as present_count
                             FROM churchevent e 
                             LEFT JOIN eventattendance ea ON e.EventID = ea.EventID";
                if (!empty($filters['date_from'])) {
-                  $sql .= " WHERE e.EventDate >= :date_from";
+                  $sql .= " WHERE e.EventDateTime >= :date_from";
                   $params[':date_from'] = $filters['date_from'];
                }
                if (!empty($filters['date_to'])) {
-                  $sql .= (!empty($params) ? ' AND' : ' WHERE') . " e.EventDate <= :date_to";
+                  $sql .= (!empty($params) ? ' AND' : ' WHERE') . " e.EventDateTime <= :date_to";
                   $params[':date_to'] = $filters['date_to'];
                }
                $sql .= " GROUP BY e.EventID";
@@ -441,11 +441,11 @@ class Event
                             JOIN churchmember m ON v.MbrID = m.MbrID
                             JOIN churchevent e ON v.EventID = e.EventID";
                if (!empty($filters['date_from'])) {
-                  $sql .= " WHERE e.EventDate >= :date_from";
+                  $sql .= " WHERE e.EventDateTime >= :date_from";
                   $params[':date_from'] = $filters['date_from'];
                }
                if (!empty($filters['date_to'])) {
-                  $sql .= (!empty($params) ? ' AND' : ' WHERE') . " e.EventDate <= :date_to";
+                  $sql .= (!empty($params) ? ' AND' : ' WHERE') . " e.EventDateTime <= :date_to";
                   $params[':date_to'] = $filters['date_to'];
                }
                $sql .= " GROUP BY m.MbrID";
