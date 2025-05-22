@@ -370,12 +370,17 @@ class Event
                'ea.*',
                'm.MbrFirstName',
                'm.MbrFamilyName',
-               'e.EventName'
+               'm.MbrOtherNames',
+               'e.EventName',
+               'e.EventDateTime',
+               'e.Location'
             ],
             conditions: ['ea.EventID' => ':id'],
             params: [':id' => $eventId]
          );
-
+         if (empty($attendance)) {
+            throw new Exception('No attendance records found for this event');
+         }
          return ['data' => $attendance];
       } catch (Exception $e) {
          Helpers::logError('Event attendance get error: ' . $e->getMessage());
