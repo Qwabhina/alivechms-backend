@@ -87,13 +87,13 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
       $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
       $limit = isset($_GET['limit']) ? max(1, min(100, intval($_GET['limit']))) : 10;
       $filters = [];
-      if (isset($_GET['fiscal_year_id'])) {
-         $filters['fiscal_year_id'] = $_GET['fiscal_year_id'];
+      if (isset($_GET['fiscal_year_id']) && is_numeric($_GET['fiscal_year_id'])) {
+         $filters['fiscal_year_id'] = intval($_GET['fiscal_year_id']);
       }
-      if (isset($_GET['category_id'])) {
-         $filters['category_id'] = $_GET['category_id'];
+      if (isset($_GET['category_id']) && is_numeric($_GET['category_id'])) {
+         $filters['category_id'] = intval($_GET['category_id']);
       }
-      if (isset($_GET['status'])) {
+      if (isset($_GET['status']) && in_array($_GET['status'], ['Pending Approval', 'Approved', 'Declined'])) {
          $filters['status'] = $_GET['status'];
       }
       try {
@@ -106,7 +106,9 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
 
    case 'GET expense/report':
       // Auth::checkPermission($token, 'view_expense');
-      $type = $_GET['type'] ?? null;
+
+      $type = $pathParts[2] ?? null;
+
       if (!$type) {
          Helpers::sendError('Report type required', 400);
       }

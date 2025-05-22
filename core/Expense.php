@@ -289,15 +289,15 @@ class Expense
          $conditions = [];
          $params = [];
 
-         if (!empty($filters['fiscal_year_id'])) {
+         if (!empty($filters['fiscal_year_id']) && is_numeric($filters['fiscal_year_id'])) {
             $conditions['e.FiscalYearID'] = ':fiscal_year_id';
             $params[':fiscal_year_id'] = $filters['fiscal_year_id'];
          }
-         if (!empty($filters['category_id'])) {
+         if (!empty($filters['category_id']) && is_numeric($filters['category_id'])) {
             $conditions['e.ExpCategoryID'] = ':category_id';
             $params[':category_id'] = $filters['category_id'];
          }
-         if (!empty($filters['status'])) {
+         if (!empty($filters['status']) && in_array($filters['status'], ['Pending Approval', 'Approved', 'Declined'])) {
             $conditions['e.ExpStatus'] = ':status';
             $params[':status'] = $filters['status'];
          }
@@ -323,9 +323,15 @@ class Expense
             offset: $offset
          );
 
+         $whereClauses = [];
+         foreach ($conditions as $column => $placeholder) {
+            $whereClauses[] = "{$column} = {$placeholder}";
+         }
+
+         $whereSql = !empty($whereClauses) ? ' WHERE ' . implode(' AND ', $whereClauses) : '';
+
          $total = $orm->runQuery(
-            "SELECT COUNT(*) as total FROM expense e" .
-               (!empty($conditions) ? ' WHERE ' . implode(' AND ', array_keys($conditions)) : ''),
+            "SELECT COUNT(*) as total FROM expense e" . $whereSql . '',
             $params
          )[0]['total'];
 

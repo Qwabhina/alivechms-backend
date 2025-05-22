@@ -41,7 +41,7 @@ class Event
          $eventId = $orm->insert('churchevent', [
             'EventName' => $data['name'],
             'EventDescription' => $data['description'] ?? null,
-            'EventDate' => $data['date'],
+            'EventDateTime' => $data['date'],
             'EventTime' => $data['time'] ?? null,
             'Location' => $data['location'] ?? null,
             'BranchID' => $data['branch_id'],
@@ -306,12 +306,6 @@ class Event
       $orm = new ORM();
       $transactionStarted = false;
       try {
-         // Validate role
-         $validRoles = ['Usher', 'Greeter', 'Worship Leader', 'Tech Support'];
-         if (!in_array($role, $validRoles)) {
-            throw new Exception('Invalid volunteer role');
-         }
-
          // Validate event exists
          $event = $orm->getWhere('churchevent', ['EventID' => $eventId]);
          if (empty($event)) {
@@ -376,12 +370,17 @@ class Event
                'ea.*',
                'm.MbrFirstName',
                'm.MbrFamilyName',
-               'e.EventName'
+               'm.MbrOtherNames',
+               'e.EventName',
+               'e.EventDateTime',
+               'e.Location'
             ],
             conditions: ['ea.EventID' => ':id'],
             params: [':id' => $eventId]
          );
-
+         if (empty($attendance)) {
+            throw new Exception('No attendance records found for this event');
+         }
          return ['data' => $attendance];
       } catch (Exception $e) {
          Helpers::logError('Event attendance get error: ' . $e->getMessage());
@@ -425,16 +424,16 @@ class Event
 
          switch ($type) {
             case 'attendance_by_event':
-               $sql = "SELECT e.EventName, e.EventDate, COUNT(ea.AttendanceID) as total_attendees, 
+               $sql = "SELECT e.EventName, e.EventDateTime, COUNT(ea.AttendanceID) as total_attendees, 
                             SUM(CASE WHEN ea.AttendanceStatus = 'Present' THEN 1 ELSE 0 END) as present_count
                             FROM churchevent e 
                             LEFT JOIN eventattendance ea ON e.EventID = ea.EventID";
                if (!empty($filters['date_from'])) {
-                  $sql .= " WHERE e.EventDate >= :date_from";
+                  $sql .= " WHERE e.EventDateTime >= :date_from";
                   $params[':date_from'] = $filters['date_from'];
                }
                if (!empty($filters['date_to'])) {
-                  $sql .= (!empty($params) ? ' AND' : ' WHERE') . " e.EventDate <= :date_to";
+                  $sql .= (!empty($params) ? ' AND' : ' WHERE') . " e.EventDateTime <= :date_to";
                   $params[':date_to'] = $filters['date_to'];
                }
                $sql .= " GROUP BY e.EventID";
@@ -447,15 +446,87 @@ class Event
                             JOIN churchmember m ON v.MbrID = m.MbrID
                             JOIN churchevent e ON v.EventID = e.EventID";
                if (!empty($filters['date_from'])) {
-                  $sql .= " WHERE e.EventDate >= :date_from";
+                  $sql .= " WHERE e.EventDateTime >= :date_from";
+                  $params[':date_from'] = $filters['date_from'];
+               }
+               if (!empty($filters['date_to'])) {
+                  $sql .= (!empty($params) ? ' AND' : ' WHERE') . " e.EventDateTime <= :date_to";
+                  $params[':date_to'] = $filters['date_to'];
+               }
+               $sql .= " GROUP BY m.MbrID";
+               break;
+
+            case 'attendance_by_member':
+               $sql = "SELECT m.MbrFirstName, m.MbrFamilyName, 
+                            COUNT(ea.AttendanceID) as total_events, 
+                            SUM(CASE WHEN ea.AttendanceStatus = 'Present' THEN 1 ELSE 0 END) as present_count,
+                            SUM(CASE WHEN ea.AttendanceStatus = 'Absent' THEN 1 ELSE 0 END) as absent_count,
+                            SUM(CASE WHEN ea.AttendanceStatus = 'Excused' THEN 1 ELSE 0 END) as excused_count
+                            FROM churchmember m 
+                            LEFT JOIN eventattendance ea ON m.MbrID = ea.MbrID
+                            LEFT JOIN churchevent e ON ea.EventID = e.EventID";
+               if (!empty($filters['branch_id']) && is_numeric($filters['branch_id'])) {
+                  $sql .= " WHERE e.BranchID = :branch_id";
+                  $params[':branch_id'] = $filters['branch_id'];
+               }
+               if (!empty($filters['date_from'])) {
+                  $sql .= (!empty($params) ? ' AND' : ' WHERE') . " e.EventDateTime >= :date_from";
+                  $params[':date_from'] = $filters['date_from'];
+               }
+               if (!empty($filters['date_to'])) {
+                  $sql .= (!empty($params) ? ' AND' : ' WHERE') . " e.EventDateTime <= :date_to";
+                  $params[':date_to'] = $filters['date_to'];
+               }
+               $sql .= " GROUP BY m.MbrID";
+               break;
+
+            case 'participation_by_branch':
+               $sql = "SELECT b.BranchName, 
+                            COUNT(DISTINCT e.EventID) as total_events, 
+                            COUNT(ea.AttendanceID) as total_attendees, 
+                            COUNT(v.VolunteerID) as total_volunteers
+                            FROM branch b 
+                            LEFT JOIN churchevent e ON b.BranchName = e.Location
+                            LEFT JOIN eventattendance ea ON e.EventID = ea.EventID
+                            LEFT JOIN volunteer v ON e.EventID = v.EventID";
+
+               if (!empty($filters['event_name'])) {
+                  $sql .= " WHERE e.EventName LIKE :event_name";
+                  $params[':event_name'] = '' . trim($filters['event_name']) . '%';
+               }
+               if (!empty($filters['date_from'])) {
+                  $sql .= (!empty($params) ? ' AND' : ' WHERE') . " e.EventDate >= :date_from";
                   $params[':date_from'] = $filters['date_from'];
                }
                if (!empty($filters['date_to'])) {
                   $sql .= (!empty($params) ? ' AND' : ' WHERE') . " e.EventDate <= :date_to";
                   $params[':date_to'] = $filters['date_to'];
                }
-               $sql .= " GROUP BY m.MbrID";
+               $sql .= " GROUP BY b.BranchID";
                break;
+
+            // case 'volunteer_role_distribution':
+            //    $sql = "SELECT v.Role, 
+            //                 COUNT(v.VolunteerID) as total_assignments, 
+            //                 COUNT(DISTINCT v.MbrID) as unique_volunteers
+            //                 FROM volunteer v 
+            //                 JOIN churchevent e ON v.EventID = e.EventID
+            //                 JOIN branch b ON e.BranchID = b.BranchID";
+
+            //    if (!empty($filters['branch_id']) && is_numeric($filters['branch_id'])) {
+            //       $sql .= " WHERE e.BranchID = :branch_id";
+            //       $params[':branch_id'] = $filters['branch_id'];
+            //    }
+            //    if (!empty($filters['date_from'])) {
+            //       $sql .= (!empty($params) ? ' AND' : ' WHERE') . " e.EventDateTime >= :date_from";
+            //       $params[':date_from'] = $filters['date_from'];
+            //    }
+            //    if (!empty($filters['date_to'])) {
+            //       $sql .= (!empty($params) ? ' AND' : ' WHERE') . " e.EventDateTime <= :date_to";
+            //       $params[':date_to'] = $filters['date_to'];
+            //    }
+            //    $sql .= " GROUP BY v.Role";
+            //    break;
 
             default:
                throw new Exception('Invalid report type');
@@ -465,6 +536,94 @@ class Event
          return ['data' => $results];
       } catch (Exception $e) {
          Helpers::logError('Event report error: ' . $e->getMessage());
+         throw $e;
+      }
+   }
+
+   public static function bulkAttendance($eventId, $attendances)
+   {
+      $orm = new ORM();
+      $transactionStarted = false;
+      try {
+         $event = $orm->getWhere('churchevent', ['EventID' => $eventId]);
+         if (empty($event)) {
+            throw new Exception('Event not found');
+         }
+         $orm->beginTransaction();
+         $transactionStarted = true;
+         foreach ($attendances as $attendance) {
+            if (!in_array($attendance['status'], ['Present', 'Absent', 'Excused'])) {
+               throw new Exception('Invalid attendance status for member ' . $attendance['member_id']);
+            }
+            $member = $orm->getWhere('churchmember', ['MbrID' => $attendance['member_id'], 'Deleted' => 0]);
+            if (empty($member)) {
+               throw new Exception('Invalid member ID: ' . $attendance['member_id']);
+            }
+            $existing = $orm->getWhere('eventattendance', ['EventID' => $eventId, 'MbrID' => $attendance['member_id']]);
+            if (!empty($existing)) {
+               $orm->update('eventattendance', [
+                  'AttendanceStatus' => $attendance['status'],
+                  'AttendanceDate' => date('Y-m-d H:i:s')
+               ], ['EventID' => $eventId, 'MbrID' => $attendance['member_id']]);
+            } else {
+               $orm->insert('eventattendance', [
+                  'EventID' => $eventId,
+                  'MbrID' => $attendance['member_id'],
+                  'AttendanceStatus' => $attendance['status'],
+                  'AttendanceDate' => date('Y-m-d H:i:s')
+               ]);
+            }
+         }
+         $orm->commit();
+         return ['status' => 'success', 'event_id' => $eventId, 'count' => count($attendances)];
+      } catch (Exception $e) {
+         if ($transactionStarted && $orm->in_transaction()) {
+            $orm->rollBack();
+         }
+         Helpers::logError('Bulk attendance error: ' . $e->getMessage());
+         throw $e;
+      }
+   }
+
+   public static function selfAttendance($eventId, $status, $userId)
+   {
+      $orm = new ORM();
+      $transactionStarted = false;
+      try {
+         if (!in_array($status, ['Present', 'Absent', 'Excused'])) {
+            throw new Exception('Invalid attendance status');
+         }
+         $event = $orm->getWhere('churchevent', ['EventID' => $eventId]);
+         if (empty($event)) {
+            throw new Exception('Event not found');
+         }
+         $member = $orm->getWhere('churchmember', ['MbrID' => $userId, 'Deleted' => 0]);
+         if (empty($member)) {
+            throw new Exception('Invalid member ID');
+         }
+         $orm->beginTransaction();
+         $transactionStarted = true;
+         $existing = $orm->getWhere('eventattendance', ['EventID' => $eventId, 'MbrID' => $userId]);
+         if (!empty($existing)) {
+            $orm->update('eventattendance', [
+               'AttendanceStatus' => $status,
+               'AttendanceDate' => date('Y-m-d H:i:s')
+            ], ['EventID' => $eventId, 'MbrID' => $userId]);
+         } else {
+            $orm->insert('eventattendance', [
+               'EventID' => $eventId,
+               'MbrID' => $userId,
+               'AttendanceStatus' => $status,
+               'AttendanceDate' => date('Y-m-d H:i:s')
+            ]);
+         }
+         $orm->commit();
+         return ['status' => 'success', 'event_id' => $eventId, 'member_id' => $userId];
+      } catch (Exception $e) {
+         if ($transactionStarted && $orm->in_transaction()) {
+            $orm->rollBack();
+         }
+         Helpers::logError('Self attendance error: ' . $e->getMessage());
          throw $e;
       }
    }
