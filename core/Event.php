@@ -356,10 +356,29 @@ class Event
       }
    }
 
-   public static function getAttendance($eventId)
+   public static function getAttendance($eventId, $filters = [])
    {
       $orm = new ORM();
       try {
+         $conditions = ['ea.EventID = :id'];
+         $params = [':id' => $eventId];
+
+         // Validate and add date range filters
+         if (!empty($filters['date_from'])) {
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['date_from'])) {
+               throw new Exception('Invalid date_from format. Use YYYY-MM-DD');
+            }
+            $conditions[] = 'DATE(e.EventDateTime) >= :date_from';
+            $params[':date_from'] = $filters['date_from'];
+         }
+         if (!empty($filters['date_to'])) {
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['date_to'])) {
+               throw new Exception('Invalid date_to format. Use YYYY-MM-DD');
+            }
+            $conditions[] = 'DATE(e.EventDateTime) <= :date_to';
+            $params[':date_to'] = $filters['date_to'];
+         }
+
          $attendance = $orm->selectWithJoin(
             baseTable: 'eventattendance ea',
             joins: [
@@ -375,12 +394,14 @@ class Event
                'e.EventDateTime',
                'e.Location'
             ],
-            conditions: ['ea.EventID' => ':id'],
-            params: [':id' => $eventId]
+            conditions: $conditions,
+            params: $params
          );
+
          if (empty($attendance)) {
             throw new Exception('No attendance records found for this event');
          }
+
          return ['data' => $attendance];
       } catch (Exception $e) {
          Helpers::logError('Event attendance get error: ' . $e->getMessage());
