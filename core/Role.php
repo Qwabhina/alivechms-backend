@@ -1,10 +1,20 @@
 <?php
-require_once __DIR__ . '/../vendor/autoload.php';
-require_once __DIR__ . '/ORM.php';
-require_once __DIR__ . '/Helpers.php';
 
+/** Role Class
+ * This class handles operations related to roles in the church management system.
+ * It includes methods for creating, updating, deleting, retrieving a single role, and listing all roles with pagination.
+ * @package Role
+ * @version 1.0
+ */
 class Role
 {
+   /**
+    * Creates a new role.
+    * Validates input, checks for duplicates, and inserts into the database.
+    * @param array $data The role data to create.
+    * @return array The created role ID and status.
+    * @throws Exception If validation fails or database operations fail.
+    */
    public static function create($data)
    {
       $orm = new ORM();
@@ -38,7 +48,14 @@ class Role
          throw $e;
       }
    }
-
+   /**
+    * Updates an existing role.
+    * Validates input, checks for duplicates, and updates the database.
+    * @param int $roleId The ID of the role to update.
+    * @param array $data The updated role data.
+    * @return array The updated role ID and status.
+    * @throws Exception If validation fails or database operations fail.
+    */
    public static function update($roleId, $data)
    {
       $orm = new ORM();
@@ -78,7 +95,14 @@ class Role
          throw $e;
       }
    }
-
+   /**
+    * Deletes a role.
+    * Validates that the role exists, checks if it is assigned to any members or has permissions,
+    * and deletes it from the database.
+    * @param int $roleId The ID of the role to delete.
+    * @return array The status of the deletion.
+    * @throws Exception If validation fails or database operations fail.
+    */
    public static function delete($roleId)
    {
       $orm = new ORM();
@@ -117,7 +141,13 @@ class Role
          throw $e;
       }
    }
-
+   /**
+    * Retrieves a single role by ID.
+    * Fetches the role details along with its permissions.
+    * @param int $roleId The ID of the role to retrieve.
+    * @return array The role details including permissions.
+    * @throws Exception If the role is not found or database operations fail.
+    */
    public static function get($roleId)
    {
       $orm = new ORM();
@@ -145,7 +175,15 @@ class Role
          throw $e;
       }
    }
-
+   /**
+    * Lists all roles with pagination and optional filters.
+    * Supports filtering by role name.
+    * @param int $page The page number for pagination.
+    * @param int $limit The number of roles per page.
+    * @param array $filters Optional filters for the role name.
+    * @return array The list of roles with pagination details.
+    * @throws Exception If database operations fail.
+    */
    public static function getAll($page = 1, $limit = 10, $filters = [])
    {
       $orm = new ORM();
@@ -194,7 +232,15 @@ class Role
          throw $e;
       }
    }
-
+   /**
+    * Assigns a permission to a role.
+    * Validates that the role and permission exist, checks if the permission is already assigned,
+    * and inserts the assignment into the database.
+    * @param int $roleId The ID of the role to assign the permission to.
+    * @param int $permissionId The ID of the permission to assign.
+    * @return array The status of the assignment.
+    * @throws Exception If validation fails or database operations fail.
+    */
    public static function assignPermission($roleId, $permissionId)
    {
       $orm = new ORM();
@@ -236,7 +282,15 @@ class Role
          throw $e;
       }
    }
-
+   /**
+    * Removes a permission from a role.
+    * Validates that the role and permission exist, checks if the permission is assigned,
+    * and deletes the assignment from the database. 
+    * @param int $roleId The ID of the role to remove the permission from.
+    * @param int $permissionId The ID of the permission to remove.
+    * @return array The status of the removal.
+    * @throws Exception If validation fails or database operations fail.
+    */
    public static function removePermission($roleId, $permissionId)
    {
       $orm = new ORM();
@@ -275,7 +329,15 @@ class Role
          throw $e;
       }
    }
-
+   /**
+    * Assigns a role to a church member.
+    * Validates that the member exists and is active, checks if the role exists,
+    * and updates the member's role in the database.
+    * @param int $memberId The ID of the member to assign the role to.
+    * @param int $roleId The ID of the role to assign.
+    * @return array The status of the assignment.
+    * @throws Exception If validation fails or database operations fail.
+    */
    public static function assignToMember($memberId, $roleId)
    {
       $orm = new ORM();
@@ -322,7 +384,14 @@ class Role
          throw $e;
       }
    }
-
+   /**
+    * Removes a role from a church member.
+    * Validates that the member exists and has a role assigned,
+    * retrieves the role details, and updates the member's role in the database.
+    * @param int $memberId The ID of the member to remove the role from.
+    * @return array The status of the removal.
+    * @throws Exception If validation fails or database operations fail.
+    */
    public static function removeFromMember($memberId)
    {
       $orm = new ORM();

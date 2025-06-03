@@ -1,10 +1,21 @@
 <?php
-require_once __DIR__ . '/../vendor/autoload.php';
-require_once __DIR__ . '/ORM.php';
-require_once __DIR__ . '/Helpers.php';
 
+/**
+ * MembershipType Management Class
+ * This class handles operations related to membership types in the church management system.
+ * It includes methods for creating, updating, deleting, retrieving a single type, and listing all types with pagination.
+ * @package MembershipType
+ * @version 1.0
+ */
 class MembershipType
 {
+   /**
+    * Creates a new membership type.
+    * Validates input, checks for duplicates, and inserts into the database.
+    * @param array $data The membership type data to create.
+    * @return array The created membership type ID and status.
+    * @throws Exception If validation fails or database operations fail.
+    */
    public static function createType($data)
    {
       $orm = new ORM();
@@ -40,7 +51,14 @@ class MembershipType
          throw $e;
       }
    }
-
+   /**
+    * Updates an existing membership type.
+    * Validates input, checks for duplicates, and updates the database.
+    * @param int $typeId The ID of the membership type to update.
+    * @param array $data The updated membership type data.
+    * @return array The updated membership type ID and status.
+    * @throws Exception If validation fails or database operations fail.
+    */
    public static function updateType($typeId, $data)
    {
       $orm = new ORM();
@@ -82,7 +100,13 @@ class MembershipType
          throw $e;
       }
    }
-
+   /**
+    * Deletes a membership type.
+    * Validates that the type exists and has no active assignments before deleting.
+    * @param int $typeId The ID of the membership type to delete.
+    * @return array The status of the deletion.
+    * @throws Exception If validation fails or database operations fail.
+    */
    public static function deleteType($typeId)
    {
       $orm = new ORM();
@@ -115,7 +139,12 @@ class MembershipType
          throw $e;
       }
    }
-
+   /**
+    * Retrieves a single membership type by ID.
+    * @param int $typeId The ID of the membership type to retrieve.
+    * @return array The membership type data.
+    * @throws Exception If the type is not found or database operations fail.
+    */
    public static function getType($typeId)
    {
       $orm = new ORM();
@@ -130,7 +159,14 @@ class MembershipType
          throw $e;
       }
    }
-
+   /**
+    * Retrieves a list of all membership types with pagination and optional filters.
+    * @param int $page The page number for pagination.
+    * @param int $limit The number of types per page.
+    * @param array $filters Optional filters for the type name.
+    * @return array The list of membership types and pagination info.
+    * @throws Exception If database operations fail.
+    */
    public static function getAllTypes($page = 1, $limit = 10, $filters = [])
    {
       $orm = new ORM();
@@ -166,7 +202,14 @@ class MembershipType
          throw $e;
       }
    }
-
+   /**
+    * Assigns a membership type to a member.
+    * Validates input, checks for existing assignments, and inserts the new assignment.
+    * @param int $memberId The ID of the member to assign the type to.
+    * @param array $data The assignment data including type ID and start date.
+    * @return array The status of the assignment and assignment ID.
+    * @throws Exception If validation fails or database operations fail.
+    */
    public static function assignType($memberId, $data)
    {
       $orm = new ORM();
@@ -248,7 +291,14 @@ class MembershipType
          throw $e;
       }
    }
-
+   /**
+    * Updates an existing membership type assignment.
+    * Validates input, checks if the assignment exists, and updates the end date if provided.
+    * @param int $assignmentId The ID of the assignment to update.
+    * @param array $data The updated assignment data including end date.
+    * @return array The status of the update and assignment ID.
+    * @throws Exception If validation fails or database operations fail.
+    */
    public static function updateAssignment($assignmentId, $data)
    {
       $orm = new ORM();
@@ -301,7 +351,13 @@ class MembershipType
          throw $e;
       }
    }
-
+   /**
+    * Retrieves all assignments for a specific member with optional filters.
+    * @param int $memberId The ID of the member to retrieve assignments for.
+    * @param array $filters Optional filters for active status and date range.
+    * @return array The list of assignments for the member.
+    * @throws Exception If the member is not found or database operations fail.
+    */
    public static function getMemberAssignments($memberId, $filters = [])
    {
       $orm = new ORM();

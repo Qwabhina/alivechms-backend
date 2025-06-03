@@ -1,12 +1,24 @@
 <?php
-require_once __DIR__ . '/../vendor/autoload.php';
-require_once __DIR__ . '/ORM.php';
-require_once __DIR__ . '/Helpers.php';
 
+/**
+ * Family Management Class
+ * Handles creation, updating, deletion, and retrieval of family records   
+ * Validates input data and checks for uniqueness of family names
+ * Implements error handling and transaction management
+ * @package Family
+ */
 class Family
 {
+    /**
+     * Valid family roles
+     */
     private static $validRoles = ['Head', 'Spouse', 'Child', 'Other'];
-
+    /**
+     * Create a new family
+     * @param array $data The family data containing 'name', 'head_id', and 'branch_id'
+     * @return array The created family ID and status
+     * @throws Exception if validation fails or database errors occur
+     */
     public static function create($data)
     {
         $orm = new ORM();
@@ -91,7 +103,13 @@ class Family
             throw $e;
         }
     }
-
+    /**
+     * Update an existing family
+     * @param int $familyId The ID of the family to update
+     * @param array $data The new family data containing 'name', 'head_id', and 'branch_id'
+     * @return array The updated family ID and status
+     * @throws Exception if validation fails or database errors occur
+     */
     public static function update($familyId, $data)
     {
         $orm = new ORM();
@@ -197,7 +215,12 @@ class Family
             throw $e;
         }
     }
-
+    /**
+     * Delete a family
+     * @param int $familyId The ID of the family to delete
+     * @return array The status of the deletion
+     * @throws Exception if validation fails or database errors occur
+     */
     public static function delete($familyId)
     {
         $orm = new ORM();
@@ -239,7 +262,12 @@ class Family
             throw $e;
         }
     }
-
+    /**
+     * Get a family by ID
+     * @param int $familyId The ID of the family to retrieve
+     * @return array The family data including members
+     * @throws Exception if the family does not exist or database errors occur
+     */
     public static function get($familyId)
     {
         $orm = new ORM();
@@ -289,7 +317,14 @@ class Family
             throw $e;
         }
     }
-
+    /**
+     * Get all families with pagination and optional filters
+     * @param int $page The page number for pagination
+     * @param int $limit The number of records per page
+     * @param array $filters Optional filters for branch ID and family name
+     * @return array List of families with pagination info
+     * @throws Exception if database errors occur
+     */
     public static function getAll($page = 1, $limit = 10, $filters = [])
     {
         $orm = new ORM();
@@ -346,7 +381,13 @@ class Family
             throw $e;
         }
     }
-
+    /**
+     * Add a member to a family
+     * @param int $familyId The ID of the family to add the member to
+     * @param array $data The member data containing 'member_id' and 'role'
+     * @return array The status of the addition and family ID
+     * @throws Exception if validation fails or database errors occur
+     */
     public static function addMember($familyId, $data)
     {
         $orm = new ORM();
@@ -428,7 +469,13 @@ class Family
             throw $e;
         }
     }
-
+    /**
+     * Remove a member from a family
+     * @param int $familyId The ID of the family to remove the member from
+     * @param int $memberId The ID of the member to remove
+     * @return array The status of the removal and family ID
+     * @throws Exception if validation fails or database errors occur
+     */
     public static function removeMember($familyId, $memberId)
     {
         $orm = new ORM();
@@ -486,7 +533,14 @@ class Family
             throw $e;
         }
     }
-
+    /**
+     * Update a member's role in a family
+     * @param int $familyId The ID of the family
+     * @param int $memberId The ID of the member
+     * @param array $data The data containing 'role' and optionally 'created_by'
+     * @return array The status of the update and family/member IDs
+     * @throws Exception if validation fails or database errors occur
+     */
     public static function updateMemberRole($familyId, $memberId, $data)
     {
         $orm = new ORM();

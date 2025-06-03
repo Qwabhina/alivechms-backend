@@ -1,10 +1,19 @@
 <?php
-require_once __DIR__ . '/../vendor/autoload.php';
-require_once __DIR__ . '/ORM.php';
-require_once __DIR__ . '/Helpers.php';
 
+/**
+ * Group Management Class
+ * Handles creation, updating, deletion, and retrieval of church groups.
+ * Also manages group members and communications. 
+ */
 class Group
 {
+   /**
+    * Create a new church group
+    *
+    * @param array $data Group data including name, leader_id, type_id, and optional description
+    * @return array Result of the operation with status and group ID
+    * @throws Exception if validation fails or database operations fail
+    */
    public static function create($data)
    {
       $orm = new ORM();
@@ -63,7 +72,14 @@ class Group
          throw $e;
       }
    }
-
+   /**
+    * Update an existing church group
+    *
+    * @param int $groupId ID of the group to update
+    * @param array $data Updated group data including name, leader_id, type_id, and optional description
+    * @return array Result of the operation with status and group ID
+    * @throws Exception if validation fails or database operations fail
+    */
    public static function update($groupId, $data)
    {
       $orm = new ORM();
@@ -128,7 +144,13 @@ class Group
          throw $e;
       }
    }
-
+   /**
+    * Delete a church group
+    *
+    * @param int $groupId ID of the group to delete
+    * @return array Result of the operation with status
+    * @throws Exception if validation fails or database operations fail
+    */
    public static function delete($groupId)
    {
       $orm = new ORM();
@@ -165,7 +187,13 @@ class Group
          throw $e;
       }
    }
-
+   /**
+    * Get details of a specific church group
+    *
+    * @param int $groupId ID of the group to retrieve
+    * @return array Group details including leader, type, and member count
+    * @throws Exception if group not found or database operations fail
+    */
    public static function get($groupId)
    {
       $orm = new ORM();
@@ -205,7 +233,15 @@ class Group
          throw $e;
       }
    }
-
+   /**
+    * Get all church groups with pagination and optional filters
+    *
+    * @param int $page Page number for pagination
+    * @param int $limit Number of groups per page
+    * @param array $filters Optional filters for group type, branch, and name
+    * @return array List of groups with pagination details
+    * @throws Exception if database operations fail
+    */
    public static function getAll($page = 1, $limit = 10, $filters = [])
    {
       $orm = new ORM();
@@ -268,7 +304,14 @@ class Group
          throw $e;
       }
    }
-
+   /**
+    * Add a member to a church group
+    *
+    * @param int $groupId ID of the group to add the member to
+    * @param int $memberId ID of the member to add
+    * @return array Result of the operation with status, group ID, and member ID
+    * @throws Exception if validation fails or database operations fail
+    */
    public static function addMember($groupId, $memberId)
    {
       $orm = new ORM();
@@ -318,7 +361,14 @@ class Group
          throw $e;
       }
    }
-
+   /**
+    * Remove a member from a church group
+    *
+    * @param int $groupId ID of the group to remove the member from
+    * @param int $memberId ID of the member to remove
+    * @return array Result of the operation with status, group ID, and member ID
+    * @throws Exception if validation fails or database operations fail
+    */
    public static function removeMember($groupId, $memberId)
    {
       $orm = new ORM();
@@ -370,7 +420,14 @@ class Group
          throw $e;
       }
    }
-
+   /**
+    * Send a message to a church group
+    *
+    * @param int $groupId ID of the group to send the message to
+    * @param array $data Message data including title, message, and sender ID
+    * @return array Result of the operation with status and communication ID
+    * @throws Exception if validation fails or database operations fail
+    */
    public static function sendMessage($groupId, $data)
    {
       $orm = new ORM();
@@ -420,7 +477,14 @@ class Group
          throw $e;
       }
    }
-
+   /**
+    * Get messages sent to a church group
+    * @param int $groupId ID of the group to retrieve messages for
+    * @param int $page Page number for pagination
+    * @param int $limit Number of messages per page 
+    * @return array List of messages with pagination details
+    * @throws Exception if group not found or database operations fail
+    */
    public static function getMessages($groupId, $page = 1, $limit = 10)
    {
       $orm = new ORM();
@@ -468,7 +532,14 @@ class Group
          throw $e;
       }
    }
-
+   /**
+    * Get members of a church group
+    * @param int $groupId ID of the group to retrieve members for
+    * @param int $page Page number for pagination
+    * @param int $limit Number of members per page
+    * @return array List of members with pagination details
+    * @throws Exception if group not found or database operations fail
+    */
    public static function getMembers($groupId, $page = 1, $limit = 10)
    {
       $orm = new ORM();

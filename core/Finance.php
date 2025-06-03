@@ -1,10 +1,20 @@
 <?php
-require_once __DIR__ . '/../vendor/autoload.php';
-require_once __DIR__ . '/ORM.php';
-require_once __DIR__ . '/Helpers.php';
 
+/**
+ * Finance Management Class
+ * Handles financial operations such as generating income statements and budget vs actual reports.
+ * Validates fiscal year existence and ensures data integrity.
+ * Implements error handling and logging.
+ * @package Finance
+ */
 class Finance
 {
+   /**
+    * Get income statement for a specific fiscal year
+    * @param int $fiscalYearId ID of the fiscal year
+    * @return array Income statement data including contributions, expenses, and net income
+    * @throws Exception if fiscal year is not found or database operations fail
+    */
    public static function getIncomeStatement($fiscalYearId)
    {
       $orm = new ORM();
@@ -51,7 +61,12 @@ class Finance
          throw $e;
       }
    }
-
+   /**
+    * Get budget vs actual report for a specific fiscal year
+    * @param int $fiscalYearId ID of the fiscal year
+    * @return array Budget vs actual data including budgeted amounts, actual expenses, and counts
+    * @throws Exception if fiscal year is not found or database operations fail
+    */
    public static function getBudgetVsActual($fiscalYearId)
    {
       $orm = new ORM();

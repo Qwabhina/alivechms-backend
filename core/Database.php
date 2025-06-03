@@ -1,9 +1,27 @@
 <?php
+
+/** Database Management Class
+ * Implements Singleton pattern for database connection
+ * Uses PDO for secure database interactions
+ * Loads configuration from environment variables
+ */
 class Database
 {
+    /**
+     * Singleton instance of the Database class
+     * @var Database|null
+     */
     private static $instance = null;
+    /**
+     * PDO connection object
+     * @var PDO
+     */
     private $connection;
-
+    /**
+     * Private constructor to prevent direct instantiation
+     * Initializes the database connection using PDO
+     * Loads configuration from environment variables
+     */
     private function __construct()
     {
         // You can load these from a config file or environment
@@ -24,7 +42,10 @@ class Database
             throw new Exception('Database connection failed: ' . $e->getMessage());
         }
     }
-
+    /**
+     * Get the singleton instance of the Database class
+     * @return Database
+     */
     public static function getInstance(): Database
     {
         if (self::$instance === null) {
@@ -32,7 +53,10 @@ class Database
         }
         return self::$instance;
     }
-
+    /**
+     * Get the PDO connection object
+     * @return PDO
+     */
     public function getConnection(): PDO
     {
         return $this->connection;

@@ -1,18 +1,29 @@
 <?php
-require_once __DIR__ . '/../vendor/autoload.php';
-require_once __DIR__ . '/ORM.php';
-require_once __DIR__ . '/Helpers.php';
+
+/** Auth class for handling user authentication and authorization.
+ * This class provides methods for user login, token generation, token verification,
+ * permission checking, and token management.
+ * @package Auth
+ * @version 1.0
+ */
 
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
-
 class Auth
 {
+    /**
+     * @var int $accessTokenTTL Time to live for access tokens in seconds.
+     * @var int $refreshTokenTTL Time to live for refresh tokens in seconds.
+     * @var string $secretKey Secret key for signing access tokens.
+     * @var string $refreshSecretKey Secret key for signing refresh tokens.
+     */
     private static $accessTokenTTL = 1800; // 30 minutes
     private static $refreshTokenTTL = 86400; // 1 day
     private static $secretKey;
     private static $refreshSecretKey;
-
+    /**
+     * Initialize the secret keys from environment variables or set defaults.
+     */
     private static function initKeys()
     {
         if (!self::$secretKey) {
@@ -20,66 +31,13 @@ class Auth
             self::$refreshSecretKey = $_ENV['JWT_REFRESH_SECRET'] ?: 'default-refresh-secret';
         }
     }
-
-    public static function login($username, $password)
-    {
-        self::initKeys();
-        $orm = new ORM();
-        try {
-            $user = $orm->selectWithJoin(
-                baseTable: 'userauthentication u',
-                joins: [
-                    ['table' => 'churchmember c', 'on' => 'u.MbrID = c.MbrID'],
-                    ['table' => 'memberrole mr', 'on' => 'c.MbrID = mr.MbrID', 'type' => 'LEFT'],
-                    ['table' => 'churchrole cr', 'on' => 'mr.ChurchRoleID = cr.RoleID', 'type' => 'LEFT']
-                ],
-                fields: ['u.*', 'c.*', 'cr.RoleName'],
-                conditions: ['u.Username' => ':username', 'c.MbrMembershipStatus' => ':status'],
-                params: [':username' => $username, ':status' => 'Active']
-            )[0] ?? null;
-
-            if (!$user) {
-                Helpers::logError("Login failed: Username not found - $username");
-                throw new Exception("Username not found: " . $user);
-            }
-
-            if (!password_verify($password, $user['PasswordHash'])) {
-                Helpers::logError("Login failed: Incorrect password for $username");
-                throw new Exception("Incorrect password");
-            }
-
-            $role = $orm->selectWithJoin(
-                baseTable: 'memberrole mr',
-                joins: [['table' => 'churchrole cr', 'on' => 'mr.ChurchRoleID = cr.RoleID']],
-                fields: ['cr.RoleName'],
-                conditions: ['mr.MbrID' => ':mbr_id'],
-                params: [':mbr_id' => $user['MbrID']]
-            );
-            // $roleNames = array_column($roles, 'RoleName');
-
-            $userData = [
-                'MbrID' => $user['MbrID'],
-                'Username' => $user['Username'],
-                'Role' => $role
-            ];
-
-            $refreshToken = self::generateRefreshToken($userData);
-            self::storeRefreshToken($user['MbrID'], $refreshToken);
-
-            unset($user['PasswordHash'], $user['CreatedAt'], $user['AuthUserID']);
-
-            return [
-                'type' => 'ok',
-                'access_token' => self::generateToken($userData, self::$secretKey, self::$accessTokenTTL),
-                'refresh_token' => $refreshToken,
-                'bio' => $user
-            ];
-        } catch (Exception $e) {
-            Helpers::logError("Login error: " . $e->getMessage());
-            throw $e;
-        }
-    }
-
+    /**
+     * Generate a JWT token for the user.
+     * @param array $user User data including ID, username, and role.
+     * @param string $secret Secret key to sign the token.
+     * @param int $ttl Time to live for the token in seconds.
+     * @return string The generated JWT token.
+     */
     private static function generateToken($user, $secret, $ttl)
     {
         $issuedAt = time();
@@ -92,12 +50,20 @@ class Auth
         ];
         return JWT::encode($payload, $secret, 'HS256');
     }
-
+    /** Generate a refresh token for the user.
+     * @param array $user User data including ID and username.
+     * @return string The generated refresh token.
+     */
     private static function generateRefreshToken($user)
     {
         return self::generateToken($user, self::$refreshSecretKey, self::$refreshTokenTTL);
     }
-
+    /**
+     * Store the refresh token in the database.
+     * @param int $userId The user ID to associate with the refresh token.
+     * @param string $token The refresh token to store.
+     * @throws Exception If storing the token fails.
+     */
     private static function storeRefreshToken($userId, $token)
     {
         try {
@@ -118,7 +84,12 @@ class Auth
             throw new Exception('Failed to store refresh token');
         }
     }
-
+    /**
+     * Refresh the access token using the provided refresh token.
+     * @param string $refreshToken The refresh token to use for generating a new access token.
+     * @return array An array containing the new access token and refresh token.
+     * @throws Exception If the refresh token is invalid or expired.
+     */
     public static function refreshAccessToken($refreshToken)
     {
         self::initKeys();
@@ -181,7 +152,12 @@ class Auth
             throw $e;
         }
     }
-
+    /**
+     * Verify the JWT token and return the decoded payload.
+     * @param string $token The JWT token to verify.
+     * @param string|null $secret The secret key to use for verification. If null, uses the default secret key.
+     * @return array|false The decoded payload or false if verification fails.
+     */
     public static function verify($token, $secret = null)
     {
         self::initKeys();
@@ -194,7 +170,12 @@ class Auth
             return false;
         }
     }
-
+    /**
+     * Check if the user has the required permission.
+     * @param string $token The JWT token.
+     * @param string $requiredPermission The permission to check.
+     * @throws Exception If the token is invalid or the user lacks the required permission.
+     */
     public static function checkPermission($token, $requiredPermission)
     {
         self::initKeys();
@@ -230,8 +211,10 @@ class Auth
             Helpers::sendError('Forbidden: Insufficient permissions', 403);
         }
     }
-
-
+    /**
+     * Get the Bearer token from the Authorization header.
+     * @return string|null The Bearer token or null if not found.
+     */
     public static function getBearerToken()
     {
         Helpers::addCorsHeaders();
@@ -257,19 +240,20 @@ class Auth
         Helpers::logError('Invalid Authorization header format: ' . $authorization);
         return null;
     }
-
+    /**
+     * Revoke the refresh token by marking it as revoked in the database.
+     * @param string $refreshToken The refresh token to revoke.
+     */
     public static function revokeRefreshToken($refreshToken)
     {
         $orm = new ORM();
         $orm->update('refresh_tokens', ['revoked' => 1], ['token' => $refreshToken]);
     }
-
-    public static function logout($refreshToken)
-    {
-        self::revokeRefreshToken($refreshToken);
-        return ['message' => 'Logged out successfully'];
-    }
-
+    /**
+     * Get user information from the JWT token.
+     * @param string $token The JWT token.
+     * @return array|null An array containing user information or null if token is invalid.
+     */
     public static function getUserFromToken($token)
     {
         $decoded = self::verify($token);
@@ -283,6 +267,81 @@ class Auth
             'iat' => $decoded['iat'],
             'exp' => $decoded['exp']
         ];
+    }
+    /**
+     * Login method to authenticate user and generate access and refresh tokens.
+     * @param string $username The username of the user.
+     * @param string $password The password of the user.
+     * @return array An array containing the access token, refresh token, and user bio.
+     * @throws Exception If login fails or user not found.
+     */
+    public static function login($username, $password)
+    {
+        self::initKeys();
+        $orm = new ORM();
+        try {
+            $user = $orm->selectWithJoin(
+                baseTable: 'userauthentication u',
+                joins: [
+                    ['table' => 'churchmember c', 'on' => 'u.MbrID = c.MbrID'],
+                    ['table' => 'memberrole mr', 'on' => 'c.MbrID = mr.MbrID', 'type' => 'LEFT'],
+                    ['table' => 'churchrole cr', 'on' => 'mr.ChurchRoleID = cr.RoleID', 'type' => 'LEFT']
+                ],
+                fields: ['u.*', 'c.*', 'cr.RoleName'],
+                conditions: ['u.Username' => ':username', 'c.MbrMembershipStatus' => ':status'],
+                params: [':username' => $username, ':status' => 'Active']
+            )[0] ?? null;
+
+            if (!$user) {
+                Helpers::logError("Login failed: Username not found - $username");
+                throw new Exception("Username not found: " . $user);
+            }
+
+            if (!password_verify($password, $user['PasswordHash'])) {
+                Helpers::logError("Login failed: Incorrect password for $username");
+                throw new Exception("Incorrect password");
+            }
+
+            $role = $orm->selectWithJoin(
+                baseTable: 'memberrole mr',
+                joins: [['table' => 'churchrole cr', 'on' => 'mr.ChurchRoleID = cr.RoleID']],
+                fields: ['cr.RoleName'],
+                conditions: ['mr.MbrID' => ':mbr_id'],
+                params: [':mbr_id' => $user['MbrID']]
+            );
+            // $roleNames = array_column($roles, 'RoleName');
+
+            $userData = [
+                'MbrID' => $user['MbrID'],
+                'Username' => $user['Username'],
+                'Role' => $role
+            ];
+
+            $refreshToken = self::generateRefreshToken($userData);
+            self::storeRefreshToken($user['MbrID'], $refreshToken);
+
+            unset($user['PasswordHash'], $user['CreatedAt'], $user['AuthUserID']);
+
+            return [
+                'type' => 'ok',
+                'access_token' => self::generateToken($userData, self::$secretKey, self::$accessTokenTTL),
+                'refresh_token' => $refreshToken,
+                'bio' => $user
+            ];
+        } catch (Exception $e) {
+            Helpers::logError("Login error: " . $e->getMessage());
+            throw $e;
+        }
+    }
+    /**
+     * Logout method to revoke the refresh token.
+     * @param string $refreshToken The refresh token to revoke.
+     * @return array An array containing a success message.
+     */
+    public static function logout($refreshToken)
+    {
+        self::revokeRefreshToken($refreshToken);
+        return ['message' => 'Logged out successfully'];
     }
 }
 ?>

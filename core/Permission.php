@@ -1,10 +1,21 @@
 <?php
-require_once __DIR__ . '/../vendor/autoload.php';
-require_once __DIR__ . '/ORM.php';
-require_once __DIR__ . '/Helpers.php';
 
+/**
+ * Permission Class
+ * This class handles operations related to permissions in the church management system.
+ * It includes methods for creating, updating, deleting, retrieving a single permission, and listing all permissions with pagination.
+ * @package Permission
+ * @version 1.0
+ */
 class Permission
 {
+   /**
+    * Creates a new permission.
+    * Validates input, checks for duplicates, and inserts into the database.
+    * @param array $data The permission data to create.
+    * @return array The created permission ID and status.
+    * @throws Exception If validation fails or database operations fail.
+    */
    public static function create($data)
    {
       $orm = new ORM();
@@ -38,7 +49,14 @@ class Permission
          throw $e;
       }
    }
-
+   /**
+    * Updates an existing permission.
+    * Validates input, checks for duplicates, and updates the database.
+    * @param int $permissionId The ID of the permission to update.
+    * @param array $data The updated permission data.
+    * @return array The updated permission ID and status.
+    * @throws Exception If validation fails or database operations fail.
+    */
    public static function update($permissionId, $data)
    {
       $orm = new ORM();
@@ -78,7 +96,13 @@ class Permission
          throw $e;
       }
    }
-
+   /**
+    * Deletes a permission.
+    * Validates that the permission exists and is not assigned to any roles before deletion.
+    * @param int $permissionId The ID of the permission to delete.
+    * @return array The status of the deletion.
+    * @throws Exception If validation fails or database operations fail.
+    */
    public static function delete($permissionId)
    {
       $orm = new ORM();
@@ -111,7 +135,13 @@ class Permission
          throw $e;
       }
    }
-
+   /**
+    * Retrieves a single permission by ID.
+    * Includes assigned roles in the response.
+    * @param int $permissionId The ID of the permission to retrieve.
+    * @return array The permission data with assigned roles.
+    * @throws Exception If permission not found or database operations fail.
+    */
    public static function get($permissionId)
    {
       $orm = new ORM();
@@ -139,7 +169,15 @@ class Permission
          throw $e;
       }
    }
-
+   /**
+    * Lists all permissions with pagination and optional filters.
+    * Supports filtering by permission name.
+    * @param int $page The page number for pagination.
+    * @param int $limit The number of permissions per page.
+    * @param array $filters Optional filters for the permission list.
+    * @return array The list of permissions with pagination info.
+    * @throws Exception If database operations fail.
+    */
    public static function getAll($page = 1, $limit = 10, $filters = [])
    {
       $orm = new ORM();

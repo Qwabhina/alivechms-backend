@@ -1,10 +1,21 @@
 <?php
-require_once __DIR__ . '/../vendor/autoload.php';
-require_once __DIR__ . '/ORM.php';
-require_once __DIR__ . '/Helpers.php';
 
+/**
+ * GroupType Class
+ * This class handles operations related to group types in the church management system.
+ * It includes methods for creating, updating, deleting, retrieving a single group type, and listing all group types with pagination.
+ * @package GroupType
+ * @version 1.0
+ */
 class GroupType
 {
+   /**
+    * Creates a new group type.
+    * Validates input, checks for duplicates, and inserts into the database.
+    * @param array $data The group type data to create.
+    * @return array The created group type ID and status.
+    * @throws Exception If validation fails or database operations fail.
+    */
    public static function create($data)
    {
       $orm = new ORM();
@@ -36,7 +47,14 @@ class GroupType
          throw $e;
       }
    }
-
+   /**
+    * Updates an existing group type.
+    * Validates input, checks for duplicates, and updates the database.
+    * @param int $groupTypeId The ID of the group type to update.
+    * @param array $data The group type data to update.
+    * @return array The updated group type ID and status.
+    * @throws Exception If validation fails, group type not found, or database operations fail.
+    */
    public static function update($groupTypeId, $data)
    {
       $orm = new ORM();
@@ -74,7 +92,13 @@ class GroupType
          throw $e;
       }
    }
-
+   /**
+    * Deletes a group type.
+    * Validates that the group type exists and is not referenced by any groups.
+    * @param int $groupTypeId The ID of the group type to delete.
+    * @return array The status of the deletion.
+    * @throws Exception If validation fails or database operations fail.
+    */
    public static function delete($groupTypeId)
    {
       $orm = new ORM();
@@ -107,7 +131,12 @@ class GroupType
          throw $e;
       }
    }
-
+   /**
+    * Retrieves a single group type by ID.
+    * @param int $groupTypeId The ID of the group type to retrieve.
+    * @return array The group type data.
+    * @throws Exception If the group type is not found or database operations fail.
+    */
    public static function get($groupTypeId)
    {
       $orm = new ORM();
@@ -122,7 +151,13 @@ class GroupType
          throw $e;
       }
    }
-
+   /**
+    * Retrieves all group types with pagination.
+    * @param int $page The page number for pagination.
+    * @param int $limit The number of items per page.
+    * @return array An array containing the group types and pagination info.
+    * @throws Exception If database operations fail.
+    */
    public static function getAll($page = 1, $limit = 10)
    {
       $orm = new ORM();

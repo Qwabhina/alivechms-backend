@@ -1,10 +1,19 @@
 <?php
-require_once __DIR__ . '/../vendor/autoload.php';
-require_once __DIR__ . '/ORM.php';
-require_once __DIR__ . '/Helpers.php';
 
+/** Fiscal Year Management Class
+ * Handles fiscal year management including creation, updating, deletion, and retrieval.
+ * Provides methods to manage fiscal years with validation and error handling.
+ * @package FiscalYear
+ * @version 1.0
+ */
 class FiscalYear
 {
+   /**
+    * Create a new fiscal year
+    * @param array $data Fiscal year data including start date, end date, branch ID, and status
+    * @return array Result of the creation operation
+    * @throws Exception If validation fails or fiscal year overlaps with existing ones
+    */
    public static function create($data)
    {
       $orm = new ORM();
@@ -76,7 +85,13 @@ class FiscalYear
          throw $e;
       }
    }
-
+   /**
+    * Update an existing fiscal year
+    * @param int $fiscalYearId ID of the fiscal year to update
+    * @param array $data Updated fiscal year data including start date, end date, branch ID, and status
+    * @return array Result of the update operation
+    * @throws Exception If validation fails, fiscal year not found, or overlaps with existing ones
+    */
    public static function update($fiscalYearId, $data)
    {
       $orm = new ORM();
@@ -156,7 +171,12 @@ class FiscalYear
          throw $e;
       }
    }
-
+   /**
+    * Delete a fiscal year
+    * @param int $fiscalYearId ID of the fiscal year to delete
+    * @return array Result of the deletion operation
+    * @throws Exception If fiscal year not found or has associated budgets, contributions, or expenses
+    */
    public static function delete($fiscalYearId)
    {
       $orm = new ORM();
@@ -194,7 +214,12 @@ class FiscalYear
          throw $e;
       }
    }
-
+   /**
+    * Get a fiscal year by ID
+    * @param int $fiscalYearId ID of the fiscal year to retrieve
+    * @return array Fiscal year data
+    * @throws Exception If fiscal year not found
+    */
    public static function get($fiscalYearId)
    {
       $orm = new ORM();
@@ -221,7 +246,14 @@ class FiscalYear
          throw $e;
       }
    }
-
+   /**
+    * Get all fiscal years with pagination and filters
+    * @param int $page Page number for pagination
+    * @param int $limit Number of records per page
+    * @param array $filters Filters to apply (branch_id, status, date_from, date_to)
+    * @return array List of fiscal years with pagination info
+    * @throws Exception If filters are invalid or date formats are incorrect
+    */
    public static function getAll($page = 1, $limit = 10, $filters = [])
    {
       $orm = new ORM();
@@ -291,7 +323,12 @@ class FiscalYear
          throw $e;
       }
    }
-
+   /**
+    * Close a fiscal year
+    * @param int $fiscalYearId ID of the fiscal year to close
+    * @return array Result of the close operation
+    * @throws Exception If fiscal year not found or already closed
+    */
    public static function close($fiscalYearId)
    {
       $orm = new ORM();
