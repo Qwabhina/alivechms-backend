@@ -1,10 +1,19 @@
 <?php
-require_once __DIR__ . '/../vendor/autoload.php';
-require_once __DIR__ . '/ORM.php';
-require_once __DIR__ . '/Helpers.php';
 
+/** Expense Category Management Class
+ * Handles creation, updating, deletion, and retrieval of expense categories
+ * Validates input data and checks for uniqueness of category names
+ * Implements error handling and transaction management
+ * @package ExpenseCategory
+ */
 class ExpenseCategory
 {
+    /**
+     * Create a new expense category
+     * @param array $data The category data containing 'name'
+     * @return array The created category ID and status
+     * @throws Exception if validation fails or database errors occur
+     */
     public static function create($data)
     {
         $orm = new ORM();
@@ -35,7 +44,13 @@ class ExpenseCategory
             throw $e;
         }
     }
-
+    /**
+     * Update an existing expense category
+     * @param int $categoryId The ID of the category to update
+     * @param array $data The new category data containing 'name'
+     * @return array The updated category ID and status
+     * @throws Exception if validation fails or database errors occur
+     */
     public static function update($categoryId, $data)
     {
         $orm = new ORM();
@@ -72,7 +87,12 @@ class ExpenseCategory
             throw $e;
         }
     }
-
+    /**
+     * Delete an expense category
+     * @param int $categoryId The ID of the category to delete
+     * @return array Status of the deletion
+     * @throws Exception if the category is used in expenses or does not exist
+     */
     public static function delete($categoryId)
     {
         $orm = new ORM();
@@ -100,7 +120,12 @@ class ExpenseCategory
             throw $e;
         }
     }
-
+    /**
+     * Get an expense category by ID
+     * @param int $categoryId The ID of the category to retrieve
+     * @return array The category data
+     * @throws Exception if the category does not exist
+     */
     public static function get($categoryId)
     {
         $orm = new ORM();
@@ -115,7 +140,11 @@ class ExpenseCategory
             throw $e;
         }
     }
-
+    /**
+     * Get all expense categories
+     * @return array List of all categories
+     * @throws Exception if there is an error retrieving categories
+     */
     public static function getAll()
     {
         $orm = new ORM();

@@ -4,67 +4,89 @@ require_once __DIR__ . '/../core/Family.php';
 require_once __DIR__ . '/../core/Helpers.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
-$token = Auth::getBearerToken();
+$path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+$pathParts = explode('/', trim($path, '/'));
+$action = isset($pathParts[1]) ? $pathParts[1] : '';
+$param = isset($pathParts[2]) ? $pathParts[2] : null;
+$token = isset($_SERVER['HTTP_AUTHORIZATION']) ? str_replace('Bearer ', '', $_SERVER['HTTP_AUTHORIZATION']) : '';
 
-if (!$token || !Auth::verify($token)) {
-    Helpers::sendError('Unauthorized', 401);
+try {
+    switch ("$method $action") {
+        case 'POST family':
+            Auth::checkPermission($token, 'manage_families');
+            $data = json_decode(file_get_contents('php://input'), true);
+            echo json_encode(Family::create($data));
+            break;
+
+        case 'PUT family':
+            Auth::checkPermission($token, 'manage_families');
+            if (!$param) {
+                throw new Exception('Family ID required');
+            }
+            $data = json_decode(file_get_contents('php://input'), true);
+            echo json_encode(Family::update($param, $data));
+            break;
+
+        case 'DELETE family':
+            Auth::checkPermission($token, 'manage_families');
+            if (!$param) {
+                throw new Exception('Family ID required');
+            }
+            echo json_encode(Family::delete($param));
+            break;
+
+        case 'GET family':
+            Auth::checkPermission($token, 'view_families');
+            if (!$param) {
+                throw new Exception('Family ID required');
+            }
+            echo json_encode(Family::get($param));
+            break;
+
+        case 'GET families':
+            Auth::checkPermission($token, 'view_families');
+            $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+            $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
+            $filters = [];
+            if (isset($_GET['branch_id'])) {
+                $filters['branch_id'] = $_GET['branch_id'];
+            }
+            if (isset($_GET['name'])) {
+                $filters['name'] = $_GET['name'];
+            }
+            echo json_encode(Family::getAll($page, $limit, $filters));
+            break;
+
+        case 'POST family/members':
+            Auth::checkPermission($token, 'manage_families');
+            if (!$param) {
+                throw new Exception('Family ID required');
+            }
+            $data = json_decode(file_get_contents('php://input'), true);
+            echo json_encode(Family::addMember($param, $data));
+            break;
+
+        case 'DELETE family/members':
+            Auth::checkPermission($token, 'manage_families');
+            if (!$param || !isset($pathParts[4])) {
+                throw new Exception('Family ID and Member ID required');
+            }
+            echo json_encode(Family::removeMember($param, $pathParts[4]));
+            break;
+
+        case 'PUT family/members/role':
+            Auth::checkPermission($token, 'manage_families');
+            if (!$param || !isset($pathParts[4])) {
+                throw new Exception('Family ID and Member ID required');
+            }
+            $data = json_decode(file_get_contents('php://input'), true);
+            echo json_encode(Family::updateMemberRole($param, $pathParts[4], $data));
+            break;
+
+        default:
+            throw new Exception('Invalid endpoint or method');
+    }
+} catch (Exception $e) {
+    Helpers::sendError($e->getMessage(), 400);
 }
-
-switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
-    case 'POST family/create':
-        Auth::checkPermission($token, 'edit_members');
-        $input = json_decode(file_get_contents('php://input'), true);
-        try {
-            $result = Family::create($input);
-            echo json_encode($result);
-        } catch (Exception $e) {
-            Helpers::sendError($e->getMessage(), 400);
-        }
-        break;
-
-    case 'GET family/view':
-        Auth::checkPermission($token, 'view_members');
-        $familyId = $pathParts[2] ?? null;
-        if (!$familyId) {
-            Helpers::sendError('Family ID required', 400);
-        }
-        try {
-            $family = Family::get($familyId);
-            echo json_encode($family);
-        } catch (Exception $e) {
-            Helpers::sendError($e->getMessage(), 404);
-        }
-        break;
-
-    case 'PUT family/update':
-        Auth::checkPermission($token, 'edit_members');
-        $familyId = $pathParts[2] ?? null;
-        if (!$familyId) {
-            Helpers::sendError('Family ID required', 400);
-        }
-        $input = json_decode(file_get_contents('php://input'), true);
-        try {
-            $result = Family::update($familyId, $input);
-            echo json_encode($result);
-        } catch (Exception $e) {
-            Helpers::sendError($e->getMessage(), 400);
-        }
-        break;
-
-    case 'DELETE family/delete':
-        Auth::checkPermission($token, 'edit_members');
-        $familyId = $pathParts[2] ?? null;
-        if (!$familyId) {
-            Helpers::sendError('Family ID required', 400);
-        }
-        try {
-            $result = Family::delete($familyId);
-            echo json_encode($result);
-        } catch (Exception $e) {
-            Helpers::sendError($e->getMessage(), 400);
-        }
-        break;
-
-    default:
-        Helpers::sendError('Endpoint not found', 404);
-}
+?>

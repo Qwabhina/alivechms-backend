@@ -1,15 +1,14 @@
 <?php
-require_once __DIR__ . '/../core/Auth.php';
+
+/**
+ * Budget API Routes
+ * This file handles budget-related API routes for the AliveChMS backend.
+ * It provides endpoints for creating, updating, deleting, and viewing budgets.
+ * Requires authentication via a Bearer token and appropriate permissions.
+ */
 require_once __DIR__ . '/../core/Budget.php';
-require_once __DIR__ . '/../core/Helpers.php';
 
-$method = $_SERVER['REQUEST_METHOD'];
-$token = Auth::getBearerToken();
-$pathParts = explode('/', trim($path, '/'));
-
-if (!$token || !Auth::verify($token)) {
-   Helpers::sendError('Unauthorized', 401);
-}
+if (!$token || !Auth::verify($token))  Helpers::sendError('Unauthorized', 401);
 
 switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
    case 'POST budget/create':
@@ -83,5 +82,8 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
       } catch (Exception $e) {
          Helpers::sendError($e->getMessage(), 400);
       }
+      break;
+   default:
+      Helpers::sendError('Request Malfformed', 405);
       break;
 }

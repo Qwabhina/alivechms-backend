@@ -1,10 +1,21 @@
 <?php
-require_once __DIR__ . '/../vendor/autoload.php';
-require_once __DIR__ . '/ORM.php';
-require_once __DIR__ . '/Helpers.php';
 
+/**
+ * Member Class
+ * This class handles operations related to church members in the church management system.
+ * It includes methods for registering, updating, deleting, retrieving a single member, and listing all members with pagination.
+ * @package Member 
+ * @version 1.0
+ */
 class Member
 {
+    /**
+     * Registers a new church member.
+     * Validates input, checks for duplicates, and inserts into the database.
+     * @param array $data The member data to register.
+     * @return array The created member ID and status.
+     * @throws Exception If validation fails or database operations fail.
+     */
     public static function register($data)
     {
         $orm = new ORM();
@@ -63,7 +74,14 @@ class Member
             throw $e;
         }
     }
-
+    /**
+     * Updates an existing church member.
+     * Validates input, checks for duplicates, and updates the database.
+     * @param int $mbrId The ID of the member to update.
+     * @param array $data The member data to update.
+     * @return array The updated member ID and status.
+     * @throws Exception If validation fails, member not found, or database operations fail.
+     */
     public static function update($mbrId, $data)
     {
         $orm = new ORM();
@@ -105,7 +123,13 @@ class Member
             throw $e;
         }
     }
-
+    /**
+     * Deletes a church member.
+     * Soft deletes the member by marking them as deleted in the database.
+     * @param int $mbrId The ID of the member to delete.
+     * @return array The status of the deletion.
+     * @throws Exception If database operations fail.
+     */
     public static function delete($mbrId)
     {
         $orm = new ORM();
@@ -117,7 +141,53 @@ class Member
             throw $e;
         }
     }
+    /**
+     * Retrieves a list of all church members with pagination.
+     * @param int $page The page number for pagination.
+     * @param int $limit The number of members per page.
+     * @return array The list of members and total count.
+     * @throws Exception If database operations fail.
+     */
+    public static function getAll($page = 1, $limit = 10)
+    {
+        $orm = new ORM();
+        try {
+            $offset = ($page - 1) * $limit;
 
+            $members = $orm->selectWithJoin(
+                baseTable: 'churchmember c',
+                joins: [
+                    ['table' => 'member_phone p', 'on' => 'c.MbrID = p.MbrID', 'type' => 'LEFT'],
+                    ['table' => 'family f', 'on' => 'c.FamilyID = f.FamilyID', 'type' => 'LEFT']
+                ],
+                fields: ['c.*', 'GROUP_CONCAT(p.PhoneNumber) as PhoneNumbers', 'f.FamilyName'],
+                conditions: ['c.Deleted' => 0],
+                limit: $limit,
+                offset: $offset,
+                groupBy: ['c.MbrID']
+            );
+
+            $total = $orm->runQuery('SELECT COUNT(*) as total FROM churchmember WHERE Deleted = 0')[0]['total'];
+
+            return [
+                'data' => $members,
+                'pagination' => [
+                    'page' => $page,
+                    'limit' => $limit,
+                    'total' => $total
+                ]
+            ];
+        } catch (Exception $e) {
+            Helpers::logError('Member list error: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+    /**
+     * Retrieves a single church member by ID.
+     * @param int $mbrId The ID of the member to retrieve.
+     * @return array The member data.
+     * @throws Exception If the member is not found or database operations fail.
+     */
     public static function get($mbrId)
     {
         $orm = new ORM();

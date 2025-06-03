@@ -1,15 +1,13 @@
 <?php
-require_once __DIR__ . '/../core/Auth.php';
-require_once __DIR__ . '/../core/Event.php';
-require_once __DIR__ . '/../core/Helpers.php';
 
-$method = $_SERVER['REQUEST_METHOD'];
-$token = Auth::getBearerToken();
-$pathParts = explode('/', trim($path, '/'));
-
-if (!$token || !Auth::verify($token)) {
-   Helpers::sendError('Unauthorized', 401);
-}
+/**
+ * Event API Routes
+ * This file handles event-related API routes for the AliveChMS backend.
+ * It provides endpoints for creating, updating, deleting, viewing events,
+ * managing attendance, and generating reports.
+ * Requires authentication via a Bearer token and appropriate permissions.
+ */
+if (!$token || !Auth::verify($token)) Helpers::sendError('Unauthorized', 401);
 
 switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
    case 'POST event/create':

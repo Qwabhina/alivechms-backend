@@ -1,10 +1,19 @@
 <?php
-require_once __DIR__ . '/../vendor/autoload.php';
-require_once __DIR__ . '/ORM.php';
-require_once __DIR__ . '/Helpers.php';
 
+/** Event Management Class
+ * Handles event creation, updating, deletion, retrieval, and attendance management
+ * Validates inputs and ensures data integrity
+ * @package Event
+ * @version 1.0
+ */
 class Event
 {
+   /**
+    * Create a new church event
+    * @param array $data Event data including name, date, branch, and creator
+    * @return array Result of the operation
+    * @throws Exception if validation fails or database operations fail
+    */
    public static function create($data)
    {
       $orm = new ORM();
@@ -68,7 +77,13 @@ class Event
          throw $e;
       }
    }
-
+   /**
+    * Update an existing church event
+    * @param int $eventId ID of the event to update
+    * @param array $data Updated event data
+    * @return array Result of the operation
+    * @throws Exception if validation fails or database operations fail
+    */
    public static function update($eventId, $data)
    {
       $orm = new ORM();
@@ -129,7 +144,12 @@ class Event
          throw $e;
       }
    }
-
+   /**
+    * Delete an existing church event
+    * @param int $eventId ID of the event to delete
+    * @return array Result of the operation
+    * @throws Exception if validation fails or database operations fail
+    */
    public static function delete($eventId)
    {
       $orm = new ORM();
@@ -159,7 +179,12 @@ class Event
          throw $e;
       }
    }
-
+   /**
+    * Get details of a specific event by ID
+    * @param int $eventId ID of the event to retrieve
+    * @return array Event details
+    * @throws Exception if event not found or database operations fail
+    */
    public static function get($eventId)
    {
       $orm = new ORM();
@@ -189,7 +214,14 @@ class Event
          throw $e;
       }
    }
-
+   /**
+    * Get all events with pagination and optional filters
+    * @param int $page Page number for pagination
+    * @param int $limit Number of events per page
+    * @param array $filters Optional filters for branch ID and date range
+    * @return array List of events with pagination info
+    * @throws Exception if database operations fail
+    */
    public static function getAll($page = 1, $limit = 10, $filters = [])
    {
       $orm = new ORM();
@@ -249,7 +281,14 @@ class Event
          throw $e;
       }
    }
-
+   /**
+    * Record attendance for a member at an event
+    * @param int $eventId ID of the event
+    * @param int $memberId ID of the member
+    * @param string $status Attendance status (Present, Absent, Excused)
+    * @return array Result of the operation
+    * @throws Exception if validation fails or database operations fail
+    */
    public static function recordAttendance($eventId, $memberId, $status)
    {
       $orm = new ORM();
@@ -300,7 +339,14 @@ class Event
          throw $e;
       }
    }
-
+   /**
+    * Assign a volunteer to an event with a specific role
+    * @param int $eventId ID of the event
+    * @param int $memberId ID of the member
+    * @param string $role Role of the volunteer
+    * @return array Result of the operation
+    * @throws Exception if validation fails or database operations fail
+    */
    public static function assignVolunteer($eventId, $memberId, $role)
    {
       $orm = new ORM();
@@ -355,11 +401,36 @@ class Event
          throw $e;
       }
    }
-
-   public static function getAttendance($eventId)
+   /**
+    * Get attendance records for a specific event with optional date filters
+    * @param int $eventId ID of the event
+    * @param array $filters Optional filters for date range
+    * @return array List of attendance records
+    * @throws Exception if validation fails or database operations fail
+    */
+   public static function getAttendance($eventId, $filters = [])
    {
       $orm = new ORM();
       try {
+         $conditions = ['ea.EventID = :id'];
+         $params = [':id' => $eventId];
+
+         // Validate and add date range filters
+         if (!empty($filters['date_from'])) {
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['date_from'])) {
+               throw new Exception('Invalid date_from format. Use YYYY-MM-DD');
+            }
+            $conditions[] = 'DATE(e.EventDateTime) >= :date_from';
+            $params[':date_from'] = $filters['date_from'];
+         }
+         if (!empty($filters['date_to'])) {
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['date_to'])) {
+               throw new Exception('Invalid date_to format. Use YYYY-MM-DD');
+            }
+            $conditions[] = 'DATE(e.EventDateTime) <= :date_to';
+            $params[':date_to'] = $filters['date_to'];
+         }
+
          $attendance = $orm->selectWithJoin(
             baseTable: 'eventattendance ea',
             joins: [
@@ -375,19 +446,26 @@ class Event
                'e.EventDateTime',
                'e.Location'
             ],
-            conditions: ['ea.EventID' => ':id'],
-            params: [':id' => $eventId]
+            conditions: $conditions,
+            params: $params
          );
+
          if (empty($attendance)) {
             throw new Exception('No attendance records found for this event');
          }
+
          return ['data' => $attendance];
       } catch (Exception $e) {
          Helpers::logError('Event attendance get error: ' . $e->getMessage());
          throw $e;
       }
    }
-
+   /**
+    * Get volunteers assigned to a specific event
+    * @param int $eventId ID of the event
+    * @return array List of volunteers with their details
+    * @throws Exception if database operations fail
+    */
    public static function getVolunteers($eventId)
    {
       $orm = new ORM();
@@ -414,7 +492,13 @@ class Event
          throw $e;
       }
    }
-
+   /**
+    * Generate reports based on event attendance and volunteer participation
+    * @param string $type Type of report to generate
+    * @param array $filters Optional filters for the report
+    * @return array Report data
+    * @throws Exception if report type is invalid or database operations fail
+    */
    public static function getReports($type, $filters = [])
    {
       $orm = new ORM();
@@ -539,7 +623,13 @@ class Event
          throw $e;
       }
    }
-
+   /**
+    * Bulk attendance management for multiple members at an event
+    * @param int $eventId ID of the event
+    * @param array $attendances List of attendance records with member IDs and statuses
+    * @return array Result of the operation
+    * @throws Exception if validation fails or database operations fail
+    */
    public static function bulkAttendance($eventId, $attendances)
    {
       $orm = new ORM();
@@ -584,7 +674,14 @@ class Event
          throw $e;
       }
    }
-
+   /**
+    * Self-attendance management for a member at an event
+    * @param int $eventId ID of the event
+    * @param string $status Attendance status (Present, Absent, Excused)
+    * @param int $userId ID of the member
+    * @return array Result of the operation
+    * @throws Exception if validation fails or database operations fail
+    */
    public static function selfAttendance($eventId, $status, $userId)
    {
       $orm = new ORM();

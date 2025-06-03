@@ -1,10 +1,18 @@
 <?php
-require_once __DIR__ . '/../vendor/autoload.php';
-require_once __DIR__ . '/ORM.php';
-require_once __DIR__ . '/Helpers.php';
 
+/** Budget Management Class
+ * Handles budget creation, updating, deletion, retrieval, and listing
+ * Validates inputs and ensures data integrity
+ * @package Budget
+ */
 class Budget
 {
+   /**
+    * Create a new budget entry
+    * @param array $data Budget data including fiscal year, category, branch, and amount
+    * @return array Result of the operation
+    * @throws Exception if validation fails or database operations fail
+    */
    public static function create($data)
    {
       $orm = new ORM();
@@ -56,7 +64,13 @@ class Budget
          throw $e;
       }
    }
-
+   /**
+    * Update an existing budget entry
+    * @param int $budgetId ID of the budget to update
+    * @param array $data Updated budget data
+    * @return array Result of the operation
+    * @throws Exception if validation fails or database operations fail
+    */
    public static function update($budgetId, $data)
    {
       $orm = new ORM();
@@ -90,7 +104,12 @@ class Budget
          throw $e;
       }
    }
-
+   /**
+    * Delete a budget entry
+    * @param int $budgetId ID of the budget to delete
+    * @return array Result of the operation
+    * @throws Exception if budget is approved or does not exist
+    */
    public static function delete($budgetId)
    {
       $orm = new ORM();
@@ -115,7 +134,12 @@ class Budget
          throw $e;
       }
    }
-
+   /**
+    * Get a specific budget entry by ID
+    * @param int $budgetId ID of the budget to retrieve
+    * @return array Budget details
+    * @throws Exception if budget not found or database operation fails
+    */
    public static function get($budgetId)
    {
       $orm = new ORM();
@@ -147,7 +171,14 @@ class Budget
          throw $e;
       }
    }
-
+   /**
+    * Get all budgets with pagination and optional filters
+    * @param int $page Page number for pagination
+    * @param int $limit Number of records per page
+    * @param array $filters Optional filters for fiscal year and branch
+    * @return array List of budgets with pagination info
+    * @throws Exception if database operation fails
+    */
    public static function getAll($page = 1, $limit = 10, $filters = [])
    {
       $orm = new ORM();

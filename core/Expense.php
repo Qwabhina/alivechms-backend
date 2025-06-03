@@ -1,10 +1,19 @@
 <?php
-require_once __DIR__ . '/../vendor/autoload.php';
-require_once __DIR__ . '/ORM.php';
-require_once __DIR__ . '/Helpers.php';
 
+/** Expense Management Class
+ * Handles expense creation, updating, deletion, retrieval, and listing
+ * Validates inputs and ensures data integrity
+ * Implements error handling and transaction management
+ * @package Expense
+ */
 class Expense
 {
+   /**
+    * Create a new expense entry
+    * @param array $data Expense data including title, amount, category, fiscal year, and member ID
+    * @return array Result of the operation
+    * @throws Exception if validation fails or database operations fail
+    */
    public static function create($data)
    {
       $orm = new ORM();
@@ -86,7 +95,13 @@ class Expense
          throw $e;
       }
    }
-
+   /**
+    * Update an existing expense entry
+    * @param int $expenseId The ID of the expense to update
+    * @param array $data Updated expense data
+    * @return array Result of the operation
+    * @throws Exception if validation fails or database operations fail
+    */
    public static function update($expenseId, $data)
    {
       $orm = new ORM();
@@ -145,7 +160,12 @@ class Expense
          throw $e;
       }
    }
-
+   /**
+    * Delete an expense entry
+    * @param int $expenseId The ID of the expense to delete
+    * @return array Result of the operation
+    * @throws Exception if validation fails or database operations fail
+    */
    public static function delete($expenseId)
    {
       $orm = new ORM();
@@ -171,7 +191,12 @@ class Expense
          throw $e;
       }
    }
-
+   /**
+    * Get a single expense entry by ID
+    * @param int $expenseId The ID of the expense to retrieve
+    * @return array|null The expense data or null if not found
+    * @throws Exception if database operations fail
+    */
    public static function get($expenseId)
    {
       $orm = new ORM();
@@ -211,7 +236,15 @@ class Expense
          throw $e;
       }
    }
-
+   /**
+    * Approve or decline an expense
+    * @param int $expenseId The ID of the expense to approve/decline
+    * @param int $approverId The ID of the member approving/declining
+    * @param string $status 'Approved' or 'Declined'
+    * @param string|null $comments Optional comments for the approval/decline
+    * @return array Result of the operation
+    * @throws Exception if validation fails or database operations fail
+    */
    public static function approve($expenseId, $approverId, $status, $comments = null)
    {
       $orm = new ORM();
@@ -280,7 +313,14 @@ class Expense
          throw $e;
       }
    }
-
+   /**
+    * Get all expenses with pagination and optional filters
+    * @param int $page Page number for pagination
+    * @param int $limit Number of records per page
+    * @param array $filters Optional filters for fiscal year, category, and status
+    * @return array List of expenses with pagination info
+    * @throws Exception if database operations fail
+    */
    public static function getAll($page = 1, $limit = 10, $filters = [])
    {
       $orm = new ORM();
@@ -349,7 +389,13 @@ class Expense
          throw $e;
       }
    }
-
+   /**
+    * Get expense reports based on type and optional filters
+    * @param string $type Report type (by_category, by_fiscal_year, pending_vs_approved, by_month)
+    * @param array $filters Optional filters for the report
+    * @return array Report data
+    * @throws Exception if report type is invalid or database operations fail
+    */
    public static function getReports($type, $filters = [])
    {
       $orm = new ORM();
