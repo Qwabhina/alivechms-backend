@@ -1,14 +1,15 @@
 <?php
-require_once __DIR__ . '/MembershipType.php';
-require_once __DIR__ . '/Auth.php';
-require_once __DIR__ . '/Helpers.php';
 
-$method = $_SERVER['REQUEST_METHOD'];
-$path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-$pathParts = explode('/', trim($path, '/'));
+/**
+ * Membership Type API Routes
+ * This file handles the routing for membership type management, including creation, updating, deletion, and retrieval.
+ * It checks for authentication and permissions before processing requests.
+ * It uses the MembershipType model for database interactions and returns JSON responses.
+ * Requires authentication via a Bearer token and appropriate permissions.
+ */
+require_once __DIR__ . '/MembershipType.php';
 $action = isset($pathParts[1]) ? $pathParts[1] : '';
 $param = isset($pathParts[2]) ? $pathParts[2] : null;
-$token = isset($_SERVER['HTTP_AUTHORIZATION']) ? str_replace('Bearer ', '', $_SERVER['HTTP_AUTHORIZATION']) : '';
 
 try {
    switch ("$method $action") {
@@ -91,7 +92,8 @@ try {
          break;
 
       default:
-         throw new Exception('Invalid endpoint or method');
+         Helpers::sendError('Endpoint not found', 404);
+         break;
    }
 } catch (Exception $e) {
    Helpers::sendError($e->getMessage(), 400);

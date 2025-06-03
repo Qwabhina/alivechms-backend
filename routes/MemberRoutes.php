@@ -1,15 +1,15 @@
 <?php
-require_once __DIR__ . '/../core/Auth.php';
+
+/**
+ * Member API Routes
+ * This file handles the routing for member-related operations, including viewing, creating, updating, and deleting members.
+ * It checks for authentication and permissions before processing requests.
+ * It uses the Member model for database interactions and returns JSON responses.
+ * Requires authentication via a Bearer token and appropriate permissions.
+ */
 require_once __DIR__ . '/../core/Member.php';
-require_once __DIR__ . '/../core/Helpers.php';
 
-$method = $_SERVER['REQUEST_METHOD'];
-$token = Auth::getBearerToken();
-$pathParts = explode('/', trim($path, '/'));
-
-if (!$token || !Auth::verify($token)) {
-    Helpers::sendError('Unauthorized', 401);
-}
+if (!$token || !Auth::verify($token)) Helpers::sendError('Unauthorized', 401);
 
 switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
     case 'GET member/recent':

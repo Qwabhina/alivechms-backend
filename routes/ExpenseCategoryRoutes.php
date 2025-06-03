@@ -1,5 +1,12 @@
 <?php
 
+/**
+ * Expense Category API Routes
+ * This file handles the routing for expense category management, including creation, updating, deletion, and retrieval.
+ * It checks for authentication and permissions before processing requests.
+ * It uses the ExpenseCategory model for database interactions and returns JSON responses.
+ * Requires authentication via a Bearer token and appropriate permissions.
+ */
 if (!$token || !Auth::verify($token)) Helpers::sendError('Unauthorized', 401);
 
 switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
