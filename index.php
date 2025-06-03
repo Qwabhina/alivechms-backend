@@ -1,4 +1,12 @@
 <?php
+
+/**
+ * AliveChMS Backend API
+ * This file serves as the entry point for the API, handling routing and initialization.
+ * It sets up the environment, loads necessary libraries, and routes requests to the appropriate handlers.
+ * @package AliveChMS
+ * @version 1.0.0
+ */
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
