@@ -4,6 +4,8 @@
  * AliveChMS Backend API
  * This file serves as the entry point for the API, handling routing and initialization.
  * It sets up the environment, loads necessary libraries, and routes requests to the appropriate handlers.
+ * It supports various sections such as authentication, contributions, member management, and more.
+ * It also includes error handling and CORS headers for cross-origin requests.
  * @package AliveChMS
  * @version 1.0.0
  */
