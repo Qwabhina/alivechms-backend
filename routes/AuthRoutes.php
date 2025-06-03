@@ -1,5 +1,4 @@
 <?php
-// === FILE: AuthRoutes.php ===
 
 if ($_SERVER["REQUEST_METHOD"] !== 'POST') {
     http_response_code(405);
@@ -53,7 +52,6 @@ switch ($path) {
         break;
 
     default:
-        http_response_code(404);
-        echo json_encode(['error' => 'Endpoint not found. Please check the URL.']);
+        Helpers::sendError('Endpoint not found', 404);
         break;
 }

@@ -1,16 +1,8 @@
 <?php
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    http_response_code(405);
-    echo json_encode(['error' => 'Method not allowed']);
-    exit;
-}
 
-$token = Auth::getBearerToken();
-        if (!$token || !Auth::verify($token)) {
-            http_response_code(401);
-            echo json_encode(['error' => 'Unauthorized']);
-            exit;
-        }
+if ($_SERVER['REQUEST_METHOD'] !== 'GET') Helpers::sendError('Method not allowed', 405);
+
+if (!$token || !Auth::verify($token)) Helpers::sendError('Unauthorized', 401);
 
 switch ($path) {
     case 'dashboard/highlights':
@@ -46,8 +38,7 @@ switch ($path) {
         break;
 
     default:
-        http_response_code(404);
-        echo json_encode(['error' => 'Endpoint not found']);
-        exit;
+        Helpers::sendError('Endpoint not found', 404);
+        break;
 }
 ?>

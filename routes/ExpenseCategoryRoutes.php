@@ -1,15 +1,6 @@
 <?php
-require_once __DIR__ . '/../core/Auth.php';
-require_once __DIR__ . '/../core/Expense.php';
-require_once __DIR__ . '/../core/Helpers.php';
 
-$method = $_SERVER['REQUEST_METHOD'];
-$token = Auth::getBearerToken();
-$pathParts = explode('/', trim($path, '/'));
-
-if (!$token || !Auth::verify($token)) {
-   Helpers::sendError('Unauthorized', 401);
-}
+if (!$token || !Auth::verify($token)) Helpers::sendError('Unauthorized', 401);
 
 switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
    case 'POST expensecategory/create':
