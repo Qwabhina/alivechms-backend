@@ -1,5 +1,12 @@
 <?php
 
+/**
+ * Budget API Routes
+ * This file handles budget-related API routes for the AliveChMS backend.
+ * It provides endpoints for creating, updating, deleting, and viewing budgets.
+ * Requires authentication via a Bearer token and appropriate permissions.
+ */
+require_once __DIR__ . '/../core/Budget.php';
 
 if (!$token || !Auth::verify($token))  Helpers::sendError('Unauthorized', 401);
 

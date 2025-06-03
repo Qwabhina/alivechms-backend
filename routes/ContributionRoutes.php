@@ -1,5 +1,11 @@
 <?php
 
+/**
+ * Contribution API Routes
+ * This file handles contribution-related API routes for the AliveChMS backend.
+ * It provides endpoints for fetching average contributions and listing all contributions.
+ * Requires authentication via a Bearer token and appropriate permissions.
+ */
 
 require_once __DIR__ . '/../core/Contribution.php';
 

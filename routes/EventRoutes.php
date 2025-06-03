@@ -1,5 +1,12 @@
 <?php
 
+/**
+ * Event API Routes
+ * This file handles event-related API routes for the AliveChMS backend.
+ * It provides endpoints for creating, updating, deleting, viewing events,
+ * managing attendance, and generating reports.
+ * Requires authentication via a Bearer token and appropriate permissions.
+ */
 if (!$token || !Auth::verify($token)) Helpers::sendError('Unauthorized', 401);
 
 switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {

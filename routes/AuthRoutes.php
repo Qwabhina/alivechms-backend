@@ -1,5 +1,11 @@
 <?php
 
+/**
+ * Auth API Routes
+ * This file handles authentication-related API routes for the AliveChMS backend.
+ * It provides endpoints for user login, token refresh, and logout.
+ * Requires POST requests for login and refresh, and a valid Bearer token for logout.
+ */
 if ($_SERVER["REQUEST_METHOD"] !== 'POST') {
     http_response_code(405);
     echo json_encode(['error' => 'Method not allowed']);
