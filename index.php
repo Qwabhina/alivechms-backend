@@ -37,17 +37,25 @@ $token = Auth::getBearerToken();
 try {
     $routes = [
         'auth' => 'AuthRoutes.php',
-        'secure' => 'AuthRoutes.php',
+        'budget' => 'BudgetRoutes.php',
         'contribution' => 'ContributionRoutes.php',
-        'search' => 'SearchRoutes.php',
-        'member' => 'MemberRoutes.php',
-        'family' => 'FamilyRoutes.php',
         'dashboard' => 'DashboardRoutes.php',
-        'expense' => 'ExpenseRoutes.php',
         'event' => 'EventRoutes.php',
         'expensecategory' => 'ExpenseCategoryRoutes.php',
-        'budget' => 'BudgetRoutes.php',
-        'finance' => 'FinanceRoutes.php'
+        'expense' => 'ExpenseRoutes.php',
+        'family' => 'FamilyRoutes.php',
+        'finance' => 'FinanceRoutes.php',
+        // 'file' => 'FileRoutes.php',
+        'fiscalyear' => 'FiscalYearRoutes.php',
+        'group' => 'GroupRoutes.php',
+        'groupType' => 'GroupTypeRoutes.php',
+        'member' => 'MemberRoutes.php',
+        'memberType' => 'MemberTypeRoutes.php',
+        'permission' => 'PermissionRoutes.php',
+        'role' => 'RoleRoutes.php',
+        // 'search' => 'SearchRoutes.php',
+        // 'upload' => 'UploadRoutes.php',
+
     ];
 
     if (!array_key_exists($section, $routes)) {
