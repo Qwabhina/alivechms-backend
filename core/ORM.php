@@ -50,7 +50,7 @@ class ORM
      * Check if a transaction is currently active
      * @return bool True if in transaction, false otherwise
      */
-    public function in_transaction()
+    public function inTransaction()
     {
         return $this->pdo->inTransaction();
     }
