@@ -34,6 +34,94 @@ class Helpers
         }
     }
     /**
+     * Adds CORS headers to the response.
+     * This allows cross-origin requests from any domain.
+     */
+    public static function addCorsHeaders()
+    {
+        header('Access-Control-Allow-Origin: *');
+        header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE');
+        header('Access-Control-Allow-Headers: Authorization, Content-Type');
+    }
+    /**
+     * Calculates the quotient and remainder of two numbers.
+     * This is a utility function used to break down time differences into weeks and days.
+     * The quotient is the number of times the dividend fits into the divisor, and the remainder is what is left over after the division.
+     * @param int $divisor The number to be divided.
+     * @param int $dividend The number to divide by.
+     * @return array An array containing the quotient and remainder.
+     */
+    private static function getQuotientAndRemainder($divisor, $dividend)
+    {
+        $quotient = (int)($divisor / $dividend);
+        $remainder = $divisor % $dividend;
+        return array($quotient, $remainder);
+    }
+    /**
+     * Calculates the time difference from the current time to a given timestamp.
+     * Returns a human-readable string indicating how long ago the time was.
+     * @param int $time The timestamp to compare against the current time.
+     * @return string A human-readable string indicating the time difference.
+     */
+    public static function calcDateDifference($time)
+    {
+        $date_text = "";
+
+        $calc_days = round(abs(time() - $time) / (60 * 60 * 24));
+        $calc_mins = round(abs(time() - $time) / 60);
+
+        if ($calc_days > 1) {
+            if ($calc_days < 7) {
+                $date_text .= $calc_days . " days ago.";
+            } else {
+                $d_Arr = self::getQuotientAndRemainder($calc_days, 7);
+                $wk = $d_Arr[0];
+                $dy = $d_Arr[1];
+
+                if ($wk == 1 && $dy == 0) {
+                    $date_text .= $wk . " week ago.";
+                } elseif ($wk == 1 && $dy == 1) {
+                    $date_text .= $wk . " week, " . $dy . " day ago.";
+                } elseif ($wk == 1 && $dy > 1) {
+                    $date_text .= $wk . " week, " . $dy . " days ago.";
+                } elseif ($wk > 1 && $dy > 1) {
+                    $date_text .= $wk . " weeks, " . $dy . " days ago.";
+                } else {
+                    $date_text .= $wk . " weeks ago.";
+                }
+            }
+        } elseif ($calc_days == 0) {
+            if ($calc_mins > 1) {
+                if ($calc_mins < 60) {
+                    $date_text .= $calc_mins . " minutes ago.";
+                } elseif ($calc_mins == 60) {
+                    $date_text .= "An hour ago.";
+                } else {
+                    $getHrM = self::getQuotientAndRemainder($calc_mins, 60);
+                    $hr = $getHrM[0];
+                    $min = $getHrM[1];
+
+                    if ($hr == 1 && $min == 1) {
+                        $date_text .= "About an hour ago.";
+                    } elseif ($hr == 1 && $min > 1) {
+                        $date_text .= $hr . " hour, " . $min . " minutes ago.";
+                    } elseif ($hr > 1 && $min == 1) {
+                        $date_text .= $hr . " hours, " . $min . " minute ago.";
+                    } else {
+                        $date_text .= $hr . " hours, " . $min . " minutes ago.";
+                    }
+                }
+            } elseif ($calc_mins == 0) {
+                $date_text .= "A few seconds ago.";
+            } else {
+                $date_text .= $calc_mins . " minute ago.";
+            }
+        } else {
+            $date_text .= "Yesterday";
+        }
+        return $date_text;
+    }
+    /**
      * Sends a JSON response with an error message.
      * @param string $message The error message.
      * @param int $code The HTTP status code (default is 400).
@@ -43,16 +131,6 @@ class Helpers
         http_response_code($code);
         echo json_encode(['error' => $message, 'code' => $code]);
         exit;
-    }
-    /**
-     * Adds CORS headers to the response.
-     * This allows cross-origin requests from any domain.
-     */
-    public static function addCorsHeaders()
-    {
-        header('Access-Control-Allow-Origin: *');
-        header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE');
-        header('Access-Control-Allow-Headers: Authorization, Content-Type');
     }
     /**
      * Logs an error message to a log file.
