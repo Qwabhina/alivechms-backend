@@ -16,6 +16,7 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
    case 'POST expense/create':
       Auth::checkPermission($token, 'create_expense');
       $input = json_decode(file_get_contents('php://input'), true);
+
       try {
          $result = Expense::create($input);
          echo json_encode($result);
@@ -27,9 +28,8 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
    case 'PUT expense/update':
       Auth::checkPermission($token, 'create_expense');
       $expenseId = $pathParts[2] ?? null;
-      if (!$expenseId) {
-         Helpers::sendError('Expense ID required', 400);
-      }
+      if (!$expenseId) Helpers::sendError('Expense ID required', 400);
+
       $input = json_decode(file_get_contents('php://input'), true);
       try {
          $result = Expense::update($expenseId, $input);
@@ -42,9 +42,8 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
    case 'DELETE expense/delete':
       Auth::checkPermission($token, 'delete_expense');
       $expenseId = $pathParts[2] ?? null;
-      if (!$expenseId) {
-         Helpers::sendError('Expense ID required', 400);
-      }
+      if (!$expenseId) Helpers::sendError('Expense ID required', 400);
+
       try {
          $result = Expense::delete($expenseId);
          echo json_encode($result);
@@ -56,9 +55,8 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
    case 'GET expense/view':
       // Auth::checkPermission($token, 'view_expense');
       $expenseId = $pathParts[2] ?? null;
-      if (!$expenseId) {
-         Helpers::sendError('Expense ID required', 400);
-      }
+      if (!$expenseId) Helpers::sendError('Expense ID required', 400);
+
       try {
          $expense = Expense::get($expenseId);
          echo json_encode($expense);
@@ -70,9 +68,8 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
    case 'POST expense/approve':
       // Auth::checkPermission($token, 'approve_expense');
       $expenseId = $pathParts[2] ?? null;
-      if (!$expenseId) {
-         Helpers::sendError('Expense ID required', 400);
-      }
+      if (!$expenseId) Helpers::sendError('Expense ID required', 400);
+
       $input = json_decode(file_get_contents('php://input'), true);
       try {
          $decoded = Auth::verify($token);
@@ -88,15 +85,10 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
       $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
       $limit = isset($_GET['limit']) ? max(1, min(100, intval($_GET['limit']))) : 10;
       $filters = [];
-      if (isset($_GET['fiscal_year_id']) && is_numeric($_GET['fiscal_year_id'])) {
-         $filters['fiscal_year_id'] = intval($_GET['fiscal_year_id']);
-      }
-      if (isset($_GET['category_id']) && is_numeric($_GET['category_id'])) {
-         $filters['category_id'] = intval($_GET['category_id']);
-      }
-      if (isset($_GET['status']) && in_array($_GET['status'], ['Pending Approval', 'Approved', 'Declined'])) {
-         $filters['status'] = $_GET['status'];
-      }
+      if (isset($_GET['fiscal_year_id']) && is_numeric($_GET['fiscal_year_id'])) $filters['fiscal_year_id'] = intval($_GET['fiscal_year_id']);
+      if (isset($_GET['category_id']) && is_numeric($_GET['category_id'])) $filters['category_id'] = intval($_GET['category_id']);
+      if (isset($_GET['status']) && in_array($_GET['status'], ['Pending Approval', 'Approved', 'Declined'])) $filters['status'] = $_GET['status'];
+
       try {
          $result = Expense::getAll($page, $limit, $filters);
          echo json_encode($result);
@@ -109,17 +101,12 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
       // Auth::checkPermission($token, 'view_expense');
 
       $type = $pathParts[2] ?? null;
-
-      if (!$type) {
-         Helpers::sendError('Report type required', 400);
-      }
       $filters = [];
-      if (isset($_GET['fiscal_year_id'])) {
-         $filters['fiscal_year_id'] = $_GET['fiscal_year_id'];
-      }
-      if (isset($_GET['year'])) {
-         $filters['year'] = $_GET['year'];
-      }
+
+      if (!$type) Helpers::sendError('Report type required', 400);
+      if (isset($_GET['fiscal_year_id'])) $filters['fiscal_year_id'] = $_GET['fiscal_year_id'];
+      if (isset($_GET['year'])) $filters['year'] = $_GET['year'];
+
       try {
          $result = Expense::getReports($type, $filters);
          echo json_encode($result);

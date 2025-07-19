@@ -107,7 +107,7 @@ try {
          echo json_encode(Permission::get($param));
          break;
 
-      case 'GET permissions':
+      case 'GET permission/all':
          Auth::checkPermission($token, 'view_permissions');
          $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
          $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
@@ -118,7 +118,7 @@ try {
          echo json_encode(Permission::getAll($page, $limit, $filters));
          break;
 
-      case 'POST member/role':
+      case 'POST role/assign':
          Auth::checkPermission($token, 'manage_roles');
          if (!$param) {
             throw new Exception('Member ID required');
@@ -130,7 +130,7 @@ try {
          echo json_encode(Role::assignToMember($param, $data['role_id']));
          break;
 
-      case 'DELETE member/role':
+      case 'DELETE role/remove':
          Auth::checkPermission($token, 'manage_roles');
          if (!$param) {
             throw new Exception('Member ID required');

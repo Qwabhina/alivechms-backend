@@ -82,9 +82,8 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
 
         $input = json_decode(file_get_contents('php://input'), true);
         $mbrId = $pathParts[2] ?? null;
-        if (!$mbrId) {
-            Helpers::sendError('Member ID required', 400);
-        }
+
+        if (!$mbrId)  Helpers::sendError('Member ID required', 400);
 
         try {
             $result = Member::update($mbrId, $input);
@@ -99,9 +98,8 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
         Auth::checkPermission($token, 'edit_members');
 
         $mbrId = $pathParts[2] ?? null;
-        if (!$mbrId) {
-            Helpers::sendError('Member ID required', 400);
-        }
+        if (!$mbrId) Helpers::sendError('Member ID required', 400);
+
         try {
             $result = Member::delete($mbrId);
             echo json_encode($result);
@@ -112,10 +110,10 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
 
     case 'GET member/view':
         Auth::checkPermission($token, 'view_members');
+
         $mbrId = $pathParts[2] ?? null;
-        if (!$mbrId) {
-            Helpers::sendError('Member ID required', 400);
-        }
+        if (!$mbrId) Helpers::sendError('Member ID required', 400);
+
         try {
             $member = Member::get($mbrId);
             echo json_encode($member);

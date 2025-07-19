@@ -1,7 +1,7 @@
 <?php
 
 /**
- * AliveChMS Group Type API Routes
+ * Group Type API Routes
  * This file handles the routing for group type management, including creation, updating, deletion, and retrieval.
  * It checks for authentication and permissions before processing requests.
  * It uses the GroupType model for database interactions and returns JSON responses.
