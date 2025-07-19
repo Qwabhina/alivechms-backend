@@ -28,27 +28,19 @@ class Expense
          ]);
 
          // Validate amount is positive
-         if ($data['amount'] <= 0) {
-            throw new Exception('Expense amount must be positive');
-         }
+         if ($data['amount'] <= 0) Helpers::sendError('Expense amount must be positive');
 
          // Validate fiscal year is active
          $fiscalYear = $orm->getWhere('fiscalyear', ['FiscalYearID' => $data['fiscal_year_id'], 'Status' => 'Active']);
-         if (empty($fiscalYear)) {
-            throw new Exception('Selected fiscal year is not active');
-         }
+         if (empty($fiscalYear)) Helpers::sendError('Selected fiscal year is not active');
 
          // Validate category exists
          $category = $orm->getWhere('expensecategory', ['ExpCategoryID' => $data['category_id']]);
-         if (empty($category)) {
-            throw new Exception('Invalid expense category');
-         }
+         if (empty($category)) Helpers::sendError('Invalid expense category');
 
          // Validate member exists
          $member = $orm->getWhere('churchmember', ['MbrID' => $data['member_id'], 'Deleted' => 0]);
-         if (empty($member)) {
-            throw new Exception('Invalid member ID');
-         }
+         if (empty($member)) Helpers::sendError('Invalid member ID');
 
          $orm->beginTransaction();
          $expenseId = $orm->insert('expense', [
@@ -84,15 +76,14 @@ class Expense
                'TargetGroupID' => null
             ]);
          }
-
          $orm->commit();
+
          return ['status' => 'success', 'expense_id' => $expenseId];
       } catch (Exception $e) {
-         if ($orm->in_transaction()) {
-            $orm->rollBack();
-         }
+         if ($orm->inTransaction()) $orm->rollBack();
+
          Helpers::logError('Expense create error: ' . $e->getMessage());
-         throw $e;
+         Helpers::sendError('Expense creation error.');
       }
    }
    /**
@@ -115,30 +106,20 @@ class Expense
          ]);
 
          // Validate amount is positive
-         if ($data['amount'] <= 0) {
-            throw new Exception('Expense amount must be positive');
-         }
+         if ($data['amount'] <= 0) Helpers::sendError('Expense amount must be positive');
 
          // Validate fiscal year is active
          $fiscalYear = $orm->getWhere('fiscalyear', ['FiscalYearID' => $data['fiscal_year_id'], 'Status' => 'Active']);
-         if (empty($fiscalYear)) {
-            throw new Exception('Selected fiscal year is not active');
-         }
+         if (empty($fiscalYear)) Helpers::sendError('Selected fiscal year is not active');
 
          // Validate category exists
          $category = $orm->getWhere('expensecategory', ['ExpCategoryID' => $data['category_id']]);
-         if (empty($category)) {
-            throw new Exception('Invalid expense category');
-         }
+         if (empty($category)) Helpers::sendError('Invalid expense category');
 
          // Validate expense exists and is pending
          $expense = $orm->getWhere('expense', ['ExpID' => $expenseId]);
-         if (empty($expense)) {
-            throw new Exception('Expense not found');
-         }
-         if ($expense[0]['ExpStatus'] !== 'Pending Approval') {
-            throw new Exception('Cannot update approved or declined expense');
-         }
+         if (empty($expense)) Helpers::sendError('Expense not found');
+         if ($expense[0]['ExpStatus'] !== 'Pending Approval') Helpers::sendError('Cannot update approved or declined expense');
 
          $orm->beginTransaction();
          $orm->update('expense', [
@@ -149,15 +130,14 @@ class Expense
             'FiscalYearID' => $data['fiscal_year_id'],
             'ExpCategoryID' => $data['category_id']
          ], ['ExpID' => $expenseId]);
-
          $orm->commit();
+
          return ['status' => 'success', 'expense_id' => $expenseId];
       } catch (Exception $e) {
-         if ($orm->in_transaction()) {
-            $orm->rollBack();
-         }
+         if ($orm->inTransaction())  $orm->rollBack();
+
          Helpers::logError('Expense update error: ' . $e->getMessage());
-         throw $e;
+         Helpers::sendError('Expense update error.');
       }
    }
    /**
@@ -172,23 +152,20 @@ class Expense
       try {
          // Validate expense exists and is pending
          $expense = $orm->getWhere('expense', ['ExpID' => $expenseId]);
-         if (empty($expense)) {
-            throw new Exception('Expense not found');
-         }
-         if ($expense[0]['ExpStatus'] !== 'Pending Approval') {
-            throw new Exception('Cannot delete approved or declined expense');
-         }
+         if (empty($expense)) Helpers::sendError('Expense not found');
+
+         if ($expense[0]['ExpStatus'] !== 'Pending Approval') Helpers::sendError('Cannot delete approved or declined expense');
 
          $orm->beginTransaction();
          $orm->delete('expense', ['ExpID' => $expenseId]);
          $orm->commit();
+
          return ['status' => 'success'];
       } catch (Exception $e) {
-         if ($orm->in_transaction()) {
-            $orm->rollBack();
-         }
+         if ($orm->inTransaction()) $orm->rollBack();
+
          Helpers::logError('Expense delete error: ' . $e->getMessage());
-         throw $e;
+         Helpers::sendError('Expense delete failed.');
       }
    }
    /**
@@ -227,13 +204,12 @@ class Expense
             params: [':id' => $expenseId]
          )[0] ?? null;
 
-         if (!$expense) {
-            throw new Exception('Expense not found');
-         }
+         if (!$expense) Helpers::sendError('Expense not found');
+
          return $expense;
       } catch (Exception $e) {
          Helpers::logError('Expense get error: ' . $e->getMessage());
-         throw $e;
+         Helpers::sendError('Expense retrieval error.');
       }
    }
    /**
@@ -251,30 +227,18 @@ class Expense
       $transactionStarted = false;
       try {
          // Validate inputs
-         if (!in_array($status, ['Approved', 'Declined'])) {
-            throw new Exception('Invalid approval status');
-         }
-         if (!is_numeric($expenseId) || $expenseId <= 0) {
-            throw new Exception('Invalid expense ID');
-         }
-         if (!is_numeric($approverId) || $approverId <= 0) {
-            throw new Exception('Invalid approver ID');
-         }
+         if (!in_array($status, ['Approved', 'Declined'])) Helpers::sendError('Invalid approval status');
+         if (!is_numeric($expenseId) || $expenseId <= 0) Helpers::sendError('Invalid expense ID');
+         if (!is_numeric($approverId) || $approverId <= 0) Helpers::sendError('Invalid approver ID');
 
          // Validate expense exists and is pending
          $expense = $orm->getWhere('expense', ['ExpID' => $expenseId]);
-         if (empty($expense)) {
-            throw new Exception('Expense not found');
-         }
-         if ($expense[0]['ExpStatus'] !== 'Pending Approval') {
-            throw new Exception('Expense is already processed');
-         }
+         if (empty($expense)) Helpers::sendError('Expense not found');
+         if ($expense[0]['ExpStatus'] !== 'Pending Approval') Helpers::sendError('Expense is already processed');
 
          // Validate approver exists
          $approver = $orm->getWhere('churchmember', ['MbrID' => $approverId, 'Deleted' => 0]);
-         if (empty($approver)) {
-            throw new Exception('Invalid approver ID');
-         }
+         if (empty($approver)) Helpers::sendError('Invalid approver ID');
 
          $orm->beginTransaction();
          $transactionStarted = true;
@@ -293,24 +257,22 @@ class Expense
 
          // Create notification for submitter
          $message = "Your expense '{$expense[0]['ExpTitle']}' for {$expense[0]['ExpAmount']} has been {$status}.";
-         if ($comments) {
-            $message .= " Comments: {$comments}";
-         }
+         if ($comments)  $message .= " Comments: {$comments}";
+
          $orm->insert('communication', [
             'Title' => "Expense {$status}",
             'Message' => $message,
             'SentBy' => $approverId,
             'TargetGroupID' => null
          ]);
-
          $orm->commit();
+
          return ['status' => 'success', 'expense_id' => $expenseId];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->in_transaction()) {
-            $orm->rollBack();
-         }
+         if ($transactionStarted && $orm->inTransaction()) $orm->rollBack();
          Helpers::logError('Expense approval error: ' . $e->getMessage());
-         throw $e;
+         Helpers::sendError('Expense approval failed.');
+         // throw $e;
       }
    }
    /**
@@ -364,9 +326,7 @@ class Expense
          );
 
          $whereClauses = [];
-         foreach ($conditions as $column => $placeholder) {
-            $whereClauses[] = "{$column} = {$placeholder}";
-         }
+         foreach ($conditions as $column => $placeholder) $whereClauses[] = "{$column} = {$placeholder}";
 
          $whereSql = !empty($whereClauses) ? ' WHERE ' . implode(' AND ', $whereClauses) : '';
 
@@ -385,8 +345,8 @@ class Expense
             ]
          ];
       } catch (Exception $e) {
-         Helpers::logError('Expense::getAll error: ' . $e->getMessage());
-         throw $e;
+         Helpers::logError('Expense getAll error: ' . $e->getMessage());
+         Helpers::sendError('Expense retrieval failed');
       }
    }
    /**
@@ -443,14 +403,15 @@ class Expense
                break;
 
             default:
-               throw new Exception('Invalid report type');
+               Helpers::sendError('Invalid report type');
          }
 
          $results = $orm->runQuery($sql, $params);
+
          return ['data' => $results];
       } catch (Exception $e) {
          Helpers::logError('Expense report error: ' . $e->getMessage());
-         throw $e;
+         Helpers::sendError('Expense report failed.');
       }
    }
 }
