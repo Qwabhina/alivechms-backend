@@ -29,9 +29,7 @@ class Member
             ]);
 
             $existing = $orm->getWhere('userauthentication', ['Username' => $data['username']]);
-            if ($existing) {
-                throw new Exception('Username already exists');
-            }
+            if ($existing) Helpers::sendError('Username already exists');
 
             $mbrId = $orm->insert('churchmember', [
                 'MbrFirstName' => $data['first_name'],
@@ -63,15 +61,12 @@ class Member
                 'PasswordHash' => password_hash($data['password'], PASSWORD_BCRYPT)
             ]);
 
-            $orm->insert('memberrole', [
-                'MbrID' => $mbrId,
-                'ChurchRoleID' => 6 // Default: Member
-            ]);
+            $orm->insert('memberrole', ['MbrID' => $mbrId, 'ChurchRoleID' => 6]);
 
             return ['status' => 'success', 'mbr_id' => $mbrId];
         } catch (Exception $e) {
             Helpers::logError('Member register error: ' . $e->getMessage());
-            throw $e;
+            Helpers::sendError($e->getMessage(), 400);
         }
     }
     /**
@@ -120,7 +115,7 @@ class Member
             return ['status' => 'success', 'mbr_id' => $mbrId];
         } catch (Exception $e) {
             Helpers::logError('Member update error: ' . $e->getMessage());
-            throw $e;
+            Helpers::sendError($e->getMessage(), 400);
         }
     }
     /**
@@ -138,7 +133,7 @@ class Member
             return ['status' => 'success'];
         } catch (Exception $e) {
             Helpers::logError('Member delete error: ' . $e->getMessage());
-            throw $e;
+            Helpers::sendError('Failed to delete member', 400);
         }
     }
     /**
@@ -179,7 +174,7 @@ class Member
             ];
         } catch (Exception $e) {
             Helpers::logError('Member list error: ' . $e->getMessage());
-            throw $e;
+            Helpers::sendError('Failed to retrieve members', 400);
         }
     }
     /**
@@ -203,13 +198,11 @@ class Member
                 params: [':id' => $mbrId]
             )[0] ?? null;
 
-            if (!$member) {
-                throw new Exception('Member not found');
-            }
+            if (!$member) Helpers::sendError('Member not found');
             return $member;
         } catch (Exception $e) {
             Helpers::logError('Member get error: ' . $e->getMessage());
-            throw $e;
+            Helpers::sendError('Failed to retrieve member', 400);
         }
     }
 }

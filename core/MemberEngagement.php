@@ -211,7 +211,7 @@ class MemberEngagement
          $orm->commit();
          return ['status' => 'success', 'phone_id' => $phoneId];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->in_transaction()) {
+         if ($transactionStarted && $orm->inTransaction()) {
             $orm->rollBack();
          }
          Helpers::logError('MemberEngagement addPhone error: ' . $e->getMessage());
@@ -270,7 +270,7 @@ class MemberEngagement
          $orm->commit();
          return ['status' => 'success', 'phone_id' => $phoneId];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->in_transaction()) {
+         if ($transactionStarted && $orm->inTransaction()) {
             $orm->rollBack();
          }
          Helpers::logError('MemberEngagement updatePhone error: ' . $e->getMessage());
@@ -308,7 +308,7 @@ class MemberEngagement
          $orm->commit();
          return ['status' => 'success'];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->in_transaction()) {
+         if ($transactionStarted && $orm->inTransaction()) {
             $orm->rollBack();
          }
          Helpers::logError('MemberEngagement deletePhone error: ' . $e->getMessage());

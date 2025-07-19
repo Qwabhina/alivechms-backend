@@ -65,7 +65,7 @@ class Group
          $orm->commit();
          return ['status' => 'success', 'group_id' => $groupId];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->in_transaction()) {
+         if ($transactionStarted && $orm->inTransaction()) {
             $orm->rollBack();
          }
          Helpers::logError('Group create error: ' . $e->getMessage());
@@ -137,7 +137,7 @@ class Group
          $orm->commit();
          return ['status' => 'success', 'group_id' => $groupId];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->in_transaction()) {
+         if ($transactionStarted && $orm->inTransaction()) {
             $orm->rollBack();
          }
          Helpers::logError('Group update error: ' . $e->getMessage());
@@ -180,7 +180,7 @@ class Group
          $orm->commit();
          return ['status' => 'success'];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->in_transaction()) {
+         if ($transactionStarted && $orm->inTransaction()) {
             $orm->rollBack();
          }
          Helpers::logError('Group delete error: ' . $e->getMessage());
@@ -354,7 +354,7 @@ class Group
          $orm->commit();
          return ['status' => 'success', 'group_id' => $groupId, 'member_id' => $memberId];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->in_transaction()) {
+         if ($transactionStarted && $orm->inTransaction()) {
             $orm->rollBack();
          }
          Helpers::logError('Group addMember error: ' . $e->getMessage());
@@ -413,7 +413,7 @@ class Group
          $orm->commit();
          return ['status' => 'success', 'group_id' => $groupId, 'member_id' => $memberId];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->in_transaction()) {
+         if ($transactionStarted && $orm->inTransaction()) {
             $orm->rollBack();
          }
          Helpers::logError('Group removeMember error: ' . $e->getMessage());
@@ -470,7 +470,7 @@ class Group
          $orm->commit();
          return ['status' => 'success', 'communication_id' => $communicationId];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->in_transaction()) {
+         if ($transactionStarted && $orm->inTransaction()) {
             $orm->rollBack();
          }
          Helpers::logError('Group sendMessage error: ' . $e->getMessage());

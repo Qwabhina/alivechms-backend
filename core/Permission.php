@@ -128,7 +128,7 @@ class Permission
          $orm->commit();
          return ['status' => 'success'];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->in_transaction()) {
+         if ($transactionStarted && $orm->inTransaction()) {
             $orm->rollBack();
          }
          Helpers::logError('Permission delete error: ' . $e->getMessage());

@@ -96,7 +96,7 @@ class Family
             $orm->commit();
             return ['status' => 'success', 'family_id' => $familyId];
         } catch (Exception $e) {
-            if ($transactionStarted && $orm->in_transaction()) {
+            if ($transactionStarted && $orm->inTransaction()) {
                 $orm->rollBack();
             }
             Helpers::logError('Family create error: ' . $e->getMessage());
@@ -208,7 +208,7 @@ class Family
             $orm->commit();
             return ['status' => 'success', 'family_id' => $familyId];
         } catch (Exception $e) {
-            if ($transactionStarted && $orm->in_transaction()) {
+            if ($transactionStarted && $orm->inTransaction()) {
                 $orm->rollBack();
             }
             Helpers::logError('Family update error: ' . $e->getMessage());
@@ -255,7 +255,7 @@ class Family
             $orm->commit();
             return ['status' => 'success'];
         } catch (Exception $e) {
-            if ($transactionStarted && $orm->in_transaction()) {
+            if ($transactionStarted && $orm->inTransaction()) {
                 $orm->rollBack();
             }
             Helpers::logError('Family delete error: ' . $e->getMessage());
@@ -462,7 +462,7 @@ class Family
             $orm->commit();
             return ['status' => 'success', 'family_id' => $familyId, 'member_id' => $data['member_id']];
         } catch (Exception $e) {
-            if ($transactionStarted && $orm->in_transaction()) {
+            if ($transactionStarted && $orm->inTransaction()) {
                 $orm->rollBack();
             }
             Helpers::logError('Family addMember error: ' . $e->getMessage());
@@ -526,7 +526,7 @@ class Family
             $orm->commit();
             return ['status' => 'success', 'family_id' => $familyId, 'member_id' => $memberId];
         } catch (Exception $e) {
-            if ($transactionStarted && $orm->in_transaction()) {
+            if ($transactionStarted && $orm->inTransaction()) {
                 $orm->rollBack();
             }
             Helpers::logError('Family removeMember error: ' . $e->getMessage());
@@ -596,7 +596,7 @@ class Family
             $orm->commit();
             return ['status' => 'success', 'family_id' => $familyId, 'member_id' => $memberId];
         } catch (Exception $e) {
-            if ($transactionStarted && $orm->in_transaction()) {
+            if ($transactionStarted && $orm->inTransaction()) {
                 $orm->rollBack();
             }
             Helpers::logError('Family updateMemberRole error: ' . $e->getMessage());
