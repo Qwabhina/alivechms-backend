@@ -1,18 +1,18 @@
 <?php
-require_once __DIR__ . '/FiscalYear.php';
-require_once __DIR__ . '/Auth.php';
-require_once __DIR__ . '/Helpers.php';
 
-$requestMethod = $_SERVER['REQUEST_METHOD'];
-$path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+/**
+ * Fiscal Year API Routes
+ * This file handles the routing for fiscal year management, including creation, updating, deletion, and retrieval.
+ * It checks for authentication and permissions before processing requests.
+ * It uses the FiscalYear model for database interactions and returns JSON responses.
+ * Requires authentication via a Bearer token and appropriate permissions.
+ */
 $pathParts = explode('/', trim($path, '/'));
 $action = isset($pathParts[1]) ? $pathParts[1] : '';
 $param = isset($pathParts[2]) ? $pathParts[2] : null;
 
-$token = isset($_SERVER['HTTP_AUTHORIZATION']) ? str_replace('Bearer ', '', $_SERVER['HTTP_AUTHORIZATION']) : '';
-
 try {
-   switch ("$requestMethod $action") {
+   switch ("$method $action") {
       case 'POST fiscalyear':
          Auth::checkPermission($token, 'manage_fiscal_year');
          $data = json_decode(file_get_contents('php://input'), true);
@@ -73,7 +73,7 @@ try {
          break;
 
       default:
-         throw new Exception('Invalid endpoint or method');
+         Helpers::sendError('Endpoint not found', 404);
    }
 } catch (Exception $e) {
    Helpers::sendError($e->getMessage(), 400);

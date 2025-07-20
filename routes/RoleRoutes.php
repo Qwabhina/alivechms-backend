@@ -1,15 +1,16 @@
 <?php
+
+/**
+ * Roles and Permissions API Routes
+ * This file handles the routing for role and permission management, including creation, updating, deletion, and retrieval.
+ * It checks for authentication and permissions before processing requests.
+ * It uses the Role and Permission models for database interactions and returns JSON responses.
+ * Requires authentication via a Bearer token and appropriate permissions.
+ */
 require_once __DIR__ . '/Role.php';
 require_once __DIR__ . '/Permission.php';
-require_once __DIR__ . '/Auth.php';
-require_once __DIR__ . '/Helpers.php';
-
-$method = $_SERVER['REQUEST_METHOD'];
-$path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-$pathParts = explode('/', trim($path, '/'));
 $action = isset($pathParts[1]) ? $pathParts[1] : '';
 $param = isset($pathParts[2]) ? $pathParts[2] : null;
-$token = isset($_SERVER['HTTP_AUTHORIZATION']) ? str_replace('Bearer ', '', $_SERVER['HTTP_AUTHORIZATION']) : '';
 
 try {
    switch ("$method $action") {
@@ -106,7 +107,7 @@ try {
          echo json_encode(Permission::get($param));
          break;
 
-      case 'GET permissions':
+      case 'GET permission/all':
          Auth::checkPermission($token, 'view_permissions');
          $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
          $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
@@ -117,7 +118,7 @@ try {
          echo json_encode(Permission::getAll($page, $limit, $filters));
          break;
 
-      case 'POST member/role':
+      case 'POST role/assign':
          Auth::checkPermission($token, 'manage_roles');
          if (!$param) {
             throw new Exception('Member ID required');
@@ -129,7 +130,7 @@ try {
          echo json_encode(Role::assignToMember($param, $data['role_id']));
          break;
 
-      case 'DELETE member/role':
+      case 'DELETE role/remove':
          Auth::checkPermission($token, 'manage_roles');
          if (!$param) {
             throw new Exception('Member ID required');
@@ -138,7 +139,8 @@ try {
          break;
 
       default:
-         throw new Exception('Invalid endpoint or method');
+         Helpers::sendError('Endpoint not found', 404);
+         break;
    }
 } catch (Exception $e) {
    Helpers::sendError($e->getMessage(), 400);

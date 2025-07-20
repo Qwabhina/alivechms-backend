@@ -28,21 +28,15 @@ class Event
          ]);
 
          // Validate date is in the future
-         if (strtotime($data['date']) < time()) {
-            throw new Exception('Event date must be in the future');
-         }
+         if (strtotime($data['date']) < time()) Helpers::sendError('Event date must be in the future');
 
          // Validate branch exists
          $branch = $orm->getWhere('branch', ['BranchID' => $data['branch_id']]);
-         if (empty($branch)) {
-            throw new Exception('Invalid branch ID');
-         }
+         if (empty($branch)) Helpers::sendError('Invalid branch ID');
 
          // Validate creator exists
          $creator = $orm->getWhere('churchmember', ['MbrID' => $data['created_by'], 'Deleted' => 0]);
-         if (empty($creator)) {
-            throw new Exception('Invalid creator ID');
-         }
+         if (empty($creator)) Helpers::sendError('Invalid creator ID');
 
          $orm->beginTransaction();
          $transactionStarted = true;
@@ -70,11 +64,9 @@ class Event
          $orm->commit();
          return ['status' => 'success', 'event_id' => $eventId];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->in_transaction()) {
-            $orm->rollBack();
-         }
+         if ($transactionStarted && $orm->inTransaction()) $orm->rollBack();
          Helpers::logError('Event create error: ' . $e->getMessage());
-         throw $e;
+         Helpers::sendError('Event creation failed');
       }
    }
    /**
@@ -97,21 +89,15 @@ class Event
          ]);
 
          // Validate date is in the future
-         if (strtotime($data['date']) < time()) {
-            throw new Exception('Event date must be in the future');
-         }
+         if (strtotime($data['date']) < time()) Helpers::sendError('Event date must be in the future');
 
          // Validate branch exists
          $branch = $orm->getWhere('branch', ['BranchID' => $data['branch_id']]);
-         if (empty($branch)) {
-            throw new Exception('Invalid branch ID');
-         }
+         if (empty($branch)) Helpers::sendError('Invalid branch ID');
 
          // Validate event exists
          $event = $orm->getWhere('churchevent', ['EventID' => $eventId]);
-         if (empty($event)) {
-            throw new Exception('Event not found');
-         }
+         if (empty($event)) Helpers::sendError('Event not found');
 
          $orm->beginTransaction();
          $transactionStarted = true;
@@ -137,11 +123,10 @@ class Event
          $orm->commit();
          return ['status' => 'success', 'event_id' => $eventId];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->in_transaction()) {
-            $orm->rollBack();
-         }
+         if ($transactionStarted && $orm->inTransaction()) $orm->rollBack();
+
          Helpers::logError('Event update error: ' . $e->getMessage());
-         throw $e;
+         Helpers::sendError('Event update failed');
       }
    }
    /**
@@ -157,9 +142,7 @@ class Event
       try {
          // Validate event exists
          $event = $orm->getWhere('churchevent', ['EventID' => $eventId]);
-         if (empty($event)) {
-            throw new Exception('Event not found');
-         }
+         if (empty($event)) Helpers::sendError('Event not found');
 
          $orm->beginTransaction();
          $transactionStarted = true;
@@ -172,11 +155,9 @@ class Event
          $orm->commit();
          return ['status' => 'success'];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->in_transaction()) {
-            $orm->rollBack();
-         }
+         if ($transactionStarted && $orm->inTransaction()) $orm->rollBack();
          Helpers::logError('Event delete error: ' . $e->getMessage());
-         throw $e;
+         Helpers::sendError('Event deletion failed');
       }
    }
    /**
@@ -205,13 +186,12 @@ class Event
             params: [':id' => $eventId]
          )[0] ?? null;
 
-         if (!$event) {
-            throw new Exception('Event not found');
-         }
+         if (!$event) Helpers::sendError('Event not found', 404);
+
          return $event;
       } catch (Exception $e) {
          Helpers::logError('Event get error: ' . $e->getMessage());
-         throw $e;
+         Helpers::sendError('Failed to retrieve event details');
       }
    }
    /**
@@ -278,7 +258,7 @@ class Event
          ];
       } catch (Exception $e) {
          Helpers::logError('Event getAll error: ' . $e->getMessage());
-         throw $e;
+         Helpers::sendError('Failed to retrieve events');
       }
    }
    /**
@@ -294,21 +274,15 @@ class Event
       $orm = new ORM();
       $transactionStarted = false;
       try {
-         if (!in_array($status, ['Present', 'Absent', 'Excused'])) {
-            throw new Exception('Invalid attendance status');
-         }
+         if (!in_array($status, ['Present', 'Absent', 'Excused'])) Helpers::sendError('Invalid attendance status');
 
          // Validate event exists
          $event = $orm->getWhere('churchevent', ['EventID' => $eventId]);
-         if (empty($event)) {
-            throw new Exception('Event not found');
-         }
+         if (empty($event)) Helpers::sendError('Event not found');
 
          // Validate member exists
          $member = $orm->getWhere('churchmember', ['MbrID' => $memberId, 'Deleted' => 0]);
-         if (empty($member)) {
-            throw new Exception('Invalid member ID');
-         }
+         if (empty($member)) Helpers::sendError('Invalid member ID');
 
          $orm->beginTransaction();
          $transactionStarted = true;
@@ -328,15 +302,14 @@ class Event
                'AttendanceDate' => date('Y-m-d H:i:s')
             ]);
          }
-
          $orm->commit();
+
          return ['status' => 'success', 'event_id' => $eventId, 'member_id' => $memberId];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->in_transaction()) {
-            $orm->rollBack();
-         }
+         if ($transactionStarted && $orm->inTransaction())  $orm->rollBack();
+
          Helpers::logError('Event attendance error: ' . $e->getMessage());
-         throw $e;
+         Helpers::sendError('Failed to record attendance');
       }
    }
    /**
@@ -354,15 +327,11 @@ class Event
       try {
          // Validate event exists
          $event = $orm->getWhere('churchevent', ['EventID' => $eventId]);
-         if (empty($event)) {
-            throw new Exception('Event not found');
-         }
+         if (empty($event)) Helpers::sendError('Event not found');
 
          // Validate member exists
          $member = $orm->getWhere('churchmember', ['MbrID' => $memberId, 'Deleted' => 0]);
-         if (empty($member)) {
-            throw new Exception('Invalid member ID');
-         }
+         if (empty($member)) Helpers::sendError('Invalid member ID');
 
          $orm->beginTransaction();
          $transactionStarted = true;
@@ -390,15 +359,14 @@ class Event
             'SentBy' => $event[0]['CreatedBy'],
             'TargetGroupID' => null
          ]);
-
          $orm->commit();
+
          return ['status' => 'success', 'event_id' => $eventId, 'member_id' => $memberId];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->in_transaction()) {
-            $orm->rollBack();
-         }
+         if ($transactionStarted && $orm->inTransaction()) $orm->rollBack();
+
          Helpers::logError('Event volunteer error: ' . $e->getMessage());
-         throw $e;
+         Helpers::sendError('Failed to assign volunteer');
       }
    }
    /**
@@ -417,16 +385,14 @@ class Event
 
          // Validate and add date range filters
          if (!empty($filters['date_from'])) {
-            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['date_from'])) {
-               throw new Exception('Invalid date_from format. Use YYYY-MM-DD');
-            }
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['date_from'])) Helpers::sendError('Invalid date_from format. Use YYYY-MM-DD');
+
             $conditions[] = 'DATE(e.EventDateTime) >= :date_from';
             $params[':date_from'] = $filters['date_from'];
          }
          if (!empty($filters['date_to'])) {
-            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['date_to'])) {
-               throw new Exception('Invalid date_to format. Use YYYY-MM-DD');
-            }
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['date_to'])) Helpers::sendError('Invalid date_to format. Use YYYY-MM-DD');
+
             $conditions[] = 'DATE(e.EventDateTime) <= :date_to';
             $params[':date_to'] = $filters['date_to'];
          }
@@ -450,14 +416,12 @@ class Event
             params: $params
          );
 
-         if (empty($attendance)) {
-            throw new Exception('No attendance records found for this event');
-         }
+         if (empty($attendance)) Helpers::sendError('No attendance records found for this event');
 
          return ['data' => $attendance];
       } catch (Exception $e) {
          Helpers::logError('Event attendance get error: ' . $e->getMessage());
-         throw $e;
+         Helpers::sendError('Failed to retrieve attendance records');
       }
    }
    /**
@@ -489,7 +453,7 @@ class Event
          return ['data' => $volunteers];
       } catch (Exception $e) {
          Helpers::logError('Event volunteers get error: ' . $e->getMessage());
-         throw $e;
+         Helpers::sendError('Failed to retrieve volunteers for this event');
       }
    }
    /**
@@ -589,29 +553,6 @@ class Event
                $sql .= " GROUP BY b.BranchID";
                break;
 
-            // case 'volunteer_role_distribution':
-            //    $sql = "SELECT v.Role, 
-            //                 COUNT(v.VolunteerID) as total_assignments, 
-            //                 COUNT(DISTINCT v.MbrID) as unique_volunteers
-            //                 FROM volunteer v 
-            //                 JOIN churchevent e ON v.EventID = e.EventID
-            //                 JOIN branch b ON e.BranchID = b.BranchID";
-
-            //    if (!empty($filters['branch_id']) && is_numeric($filters['branch_id'])) {
-            //       $sql .= " WHERE e.BranchID = :branch_id";
-            //       $params[':branch_id'] = $filters['branch_id'];
-            //    }
-            //    if (!empty($filters['date_from'])) {
-            //       $sql .= (!empty($params) ? ' AND' : ' WHERE') . " e.EventDateTime >= :date_from";
-            //       $params[':date_from'] = $filters['date_from'];
-            //    }
-            //    if (!empty($filters['date_to'])) {
-            //       $sql .= (!empty($params) ? ' AND' : ' WHERE') . " e.EventDateTime <= :date_to";
-            //       $params[':date_to'] = $filters['date_to'];
-            //    }
-            //    $sql .= " GROUP BY v.Role";
-            //    break;
-
             default:
                throw new Exception('Invalid report type');
          }
@@ -642,13 +583,11 @@ class Event
          $orm->beginTransaction();
          $transactionStarted = true;
          foreach ($attendances as $attendance) {
-            if (!in_array($attendance['status'], ['Present', 'Absent', 'Excused'])) {
-               throw new Exception('Invalid attendance status for member ' . $attendance['member_id']);
-            }
+            if (!in_array($attendance['status'], ['Present', 'Absent', 'Excused'])) Helpers::sendError('Invalid attendance status for member ' . $attendance['member_id']);
+
             $member = $orm->getWhere('churchmember', ['MbrID' => $attendance['member_id'], 'Deleted' => 0]);
-            if (empty($member)) {
-               throw new Exception('Invalid member ID: ' . $attendance['member_id']);
-            }
+            if (empty($member)) Helpers::sendError('Invalid member ID: ' . $attendance['member_id']);
+
             $existing = $orm->getWhere('eventattendance', ['EventID' => $eventId, 'MbrID' => $attendance['member_id']]);
             if (!empty($existing)) {
                $orm->update('eventattendance', [
@@ -667,11 +606,10 @@ class Event
          $orm->commit();
          return ['status' => 'success', 'event_id' => $eventId, 'count' => count($attendances)];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->in_transaction()) {
-            $orm->rollBack();
-         }
+         if ($transactionStarted && $orm->inTransaction()) $orm->rollBack();
+
          Helpers::logError('Bulk attendance error: ' . $e->getMessage());
-         throw $e;
+         Helpers::sendError('Failed to record bulk attendance');
       }
    }
    /**
@@ -691,13 +629,11 @@ class Event
             throw new Exception('Invalid attendance status');
          }
          $event = $orm->getWhere('churchevent', ['EventID' => $eventId]);
-         if (empty($event)) {
-            throw new Exception('Event not found');
-         }
+         if (empty($event)) Helpers::sendError('Event not found');
+
          $member = $orm->getWhere('churchmember', ['MbrID' => $userId, 'Deleted' => 0]);
-         if (empty($member)) {
-            throw new Exception('Invalid member ID');
-         }
+         if (empty($member)) Helpers::sendError('Invalid member ID');
+
          $orm->beginTransaction();
          $transactionStarted = true;
          $existing = $orm->getWhere('eventattendance', ['EventID' => $eventId, 'MbrID' => $userId]);
@@ -717,7 +653,7 @@ class Event
          $orm->commit();
          return ['status' => 'success', 'event_id' => $eventId, 'member_id' => $userId];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->in_transaction()) {
+         if ($transactionStarted && $orm->inTransaction()) {
             $orm->rollBack();
          }
          Helpers::logError('Self attendance error: ' . $e->getMessage());

@@ -1,15 +1,12 @@
 <?php
-require_once __DIR__ . '/../core/Auth.php';
-require_once __DIR__ . '/../core/Family.php';
-require_once __DIR__ . '/../core/Helpers.php';
 
-$method = $_SERVER['REQUEST_METHOD'];
-$path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-$pathParts = explode('/', trim($path, '/'));
-$action = isset($pathParts[1]) ? $pathParts[1] : '';
-$param = isset($pathParts[2]) ? $pathParts[2] : null;
-$token = isset($_SERVER['HTTP_AUTHORIZATION']) ? str_replace('Bearer ', '', $_SERVER['HTTP_AUTHORIZATION']) : '';
-
+/**
+ * Family API Routes
+ * This file handles the routing for family management, including creation, updating, deletion, and retrieval.
+ * It checks for authentication and permissions before processing requests.
+ * It uses the Family model for database interactions and returns JSON responses.
+ * Requires authentication via a Bearer token and appropriate permissions.
+ */
 try {
     switch ("$method $action") {
         case 'POST family':

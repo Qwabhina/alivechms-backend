@@ -38,8 +38,8 @@ class Database
             $this->connection->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
             $this->connection->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
         } catch (PDOException $e) {
-            // Log error in production, don't expose details
-            throw new Exception('Database connection failed: ' . $e->getMessage());
+            Helpers::logError('Database connection error: ' . $e->getMessage());
+            Helpers::sendError('Database connection failed', 500);
         }
     }
     /**
@@ -48,9 +48,7 @@ class Database
      */
     public static function getInstance(): Database
     {
-        if (self::$instance === null) {
-            self::$instance = new self();
-        }
+        if (self::$instance === null) self::$instance = new self();
         return self::$instance;
     }
     /**

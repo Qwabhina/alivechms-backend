@@ -1,12 +1,12 @@
 <?php
-require_once __DIR__ . '/../core/Auth.php';
-require_once __DIR__ . '/../core/Finance.php';
-require_once __DIR__ . '/../core/Helpers.php';
 
-$method = $_SERVER['REQUEST_METHOD'];
-$token = Auth::getBearerToken();
-$pathParts = explode('/', trim($path, '/'));
-
+/**
+ * Finance API Routes
+ * This file handles the routing for financial reports, including income statements and budget vs actual reports.
+ * It checks for authentication and permissions before processing requests.
+ * It uses the Expense model for database interactions and returns JSON responses.
+ * Requires authentication via a Bearer token and appropriate permissions.
+ */
 if (!$token || !Auth::verify($token)) {
    Helpers::sendError('Unauthorized', 401);
 }

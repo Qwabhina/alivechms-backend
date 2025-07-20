@@ -4,6 +4,8 @@
  * AliveChMS Backend API
  * This file serves as the entry point for the API, handling routing and initialization.
  * It sets up the environment, loads necessary libraries, and routes requests to the appropriate handlers.
+ * It supports various sections such as authentication, contributions, member management, and more.
+ * It also includes error handling and CORS headers for cross-origin requests.
  * @package AliveChMS
  * @version 1.0.0
  */
@@ -35,17 +37,25 @@ $token = Auth::getBearerToken();
 try {
     $routes = [
         'auth' => 'AuthRoutes.php',
-        'secure' => 'AuthRoutes.php',
+        'budget' => 'BudgetRoutes.php',
         'contribution' => 'ContributionRoutes.php',
-        'search' => 'SearchRoutes.php',
-        'member' => 'MemberRoutes.php',
-        'family' => 'FamilyRoutes.php',
         'dashboard' => 'DashboardRoutes.php',
-        'expense' => 'ExpenseRoutes.php',
         'event' => 'EventRoutes.php',
         'expensecategory' => 'ExpenseCategoryRoutes.php',
-        'budget' => 'BudgetRoutes.php',
-        'finance' => 'FinanceRoutes.php'
+        'expense' => 'ExpenseRoutes.php',
+        'family' => 'FamilyRoutes.php',
+        'finance' => 'FinanceRoutes.php',
+        // 'file' => 'FileRoutes.php',
+        'fiscalyear' => 'FiscalYearRoutes.php',
+        'group' => 'GroupRoutes.php',
+        'groupType' => 'GroupTypeRoutes.php',
+        'member' => 'MemberRoutes.php',
+        'memberType' => 'MemberTypeRoutes.php',
+        'permission' => 'PermissionRoutes.php',
+        'role' => 'RoleRoutes.php',
+        // 'search' => 'SearchRoutes.php',
+        // 'upload' => 'UploadRoutes.php',
+
     ];
 
     if (!array_key_exists($section, $routes)) {

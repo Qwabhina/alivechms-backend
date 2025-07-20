@@ -23,18 +23,14 @@ switch ($path) {
         $data = json_decode(file_get_contents('php://input'), true);
         $refreshToken = $data['refresh_token'] ?? '';
 
-        if (empty($refreshToken)) {
-            http_response_code(400);
-            echo json_encode(['error' => 'Refresh token required']);
-            exit;
-        }
+        if (empty($refreshToken)) Helpers::sendError('Refresh token required', 401);
 
         try {
             $result = Auth::refreshAccessToken($refreshToken);
             echo json_encode($result);
         } catch (Exception $e) {
-            http_response_code(401);
-            echo json_encode(['error' => $e->getMessage()]);
+            Helpers::sendError('Refresh token required', 401);
+            Helpers::logError($e->getMessage());
         }
         break;
 

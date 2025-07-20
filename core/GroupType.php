@@ -40,7 +40,7 @@ class GroupType
          $orm->commit();
          return ['status' => 'success', 'group_type_id' => $groupTypeId];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->in_transaction()) {
+         if ($transactionStarted && $orm->inTransaction()) {
             $orm->rollBack();
          }
          Helpers::logError('GroupType create error: ' . $e->getMessage());
@@ -85,7 +85,7 @@ class GroupType
          $orm->commit();
          return ['status' => 'success', 'group_type_id' => $groupTypeId];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->in_transaction()) {
+         if ($transactionStarted && $orm->inTransaction()) {
             $orm->rollBack();
          }
          Helpers::logError('GroupType update error: ' . $e->getMessage());
@@ -124,7 +124,7 @@ class GroupType
          $orm->commit();
          return ['status' => 'success'];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->in_transaction()) {
+         if ($transactionStarted && $orm->inTransaction()) {
             $orm->rollBack();
          }
          Helpers::logError('GroupType delete error: ' . $e->getMessage());

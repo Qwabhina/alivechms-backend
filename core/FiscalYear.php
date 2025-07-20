@@ -78,7 +78,7 @@ class FiscalYear
          $orm->commit();
          return ['status' => 'success', 'fiscal_year_id' => $fiscalYearId];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->in_transaction()) {
+         if ($transactionStarted && $orm->inTransaction()) {
             $orm->rollBack();
          }
          Helpers::logError('Fiscal year create error: ' . $e->getMessage());
@@ -164,7 +164,7 @@ class FiscalYear
          $orm->commit();
          return ['status' => 'success', 'fiscal_year_id' => $fiscalYearId];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->in_transaction()) {
+         if ($transactionStarted && $orm->inTransaction()) {
             $orm->rollBack();
          }
          Helpers::logError('Fiscal year update error: ' . $e->getMessage());
@@ -207,7 +207,7 @@ class FiscalYear
          $orm->commit();
          return ['status' => 'success'];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->in_transaction()) {
+         if ($transactionStarted && $orm->inTransaction()) {
             $orm->rollBack();
          }
          Helpers::logError('Fiscal year delete error: ' . $e->getMessage());
@@ -367,7 +367,7 @@ class FiscalYear
          $orm->commit();
          return ['status' => 'success', 'fiscal_year_id' => $fiscalYearId];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->in_transaction()) {
+         if ($transactionStarted && $orm->inTransaction()) {
             $orm->rollBack();
          }
          Helpers::logError('Fiscal year close error: ' . $e->getMessage());
