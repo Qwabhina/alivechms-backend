@@ -183,22 +183,17 @@ class Expense
             joins: [
                ['table' => 'churchmember m', 'on' => 'e.MbrID = m.MbrID', 'type' => 'LEFT'],
                ['table' => 'expensecategory ec', 'on' => 'e.ExpCategoryID = ec.ExpCategoryID', 'type' => 'LEFT'],
-               ['table' => 'fiscalyear fy', 'on' => 'e.FiscalYearID = fy.FiscalYearID', 'type' => 'LEFT'],
                ['table' => 'expense_approval ea', 'on' => 'e.ExpID = ea.ExpID', 'type' => 'LEFT'],
                ['table' => 'churchmember ma', 'on' => 'ea.ApproverID = ma.MbrID', 'type' => 'LEFT']
             ],
             fields: [
                'e.*',
-               'm.MbrFirstName',
-               'm.MbrFamilyName',
+               'CONCAT(m.MbrFirstName, " ", m.MbrFamilyName) AS MemberName',
                'ec.ExpCategoryName',
-               'fy.FiscalYearStartDate',
-               'fy.FiscalYearEndDate',
                'ea.ApprovalStatus',
                'ea.ApprovalDate',
                'ea.Comments',
-               'ma.MbrFirstName as ApproverFirstName',
-               'ma.MbrFamilyName as ApproverFamilyName'
+               'CONCAT(ma.MbrFirstName, " ", ma.MbrFamilyName) AS ApproverName',
             ],
             conditions: ['e.ExpID' => ':id'],
             params: [':id' => $expenseId]
@@ -309,15 +304,17 @@ class Expense
             joins: [
                ['table' => 'churchmember m', 'on' => 'e.MbrID = m.MbrID', 'type' => 'LEFT'],
                ['table' => 'expensecategory ec', 'on' => 'e.ExpCategoryID = ec.ExpCategoryID', 'type' => 'LEFT'],
-               ['table' => 'fiscalyear fy', 'on' => 'e.FiscalYearID = fy.FiscalYearID', 'type' => 'LEFT']
+               ['table' => 'expense_approval ea', 'on' => 'e.ExpID = ea.ExpID', 'type' => 'LEFT'],
+               ['table' => 'churchmember ma', 'on' => 'ea.ApproverID = ma.MbrID', 'type' => 'LEFT']
             ],
             fields: [
                'e.*',
-               'm.MbrFirstName',
-               'm.MbrFamilyName',
+               'CONCAT(m.MbrFirstName, " ", m.MbrFamilyName) AS MemberName',
                'ec.ExpCategoryName',
-               'fy.FiscalYearStartDate',
-               'fy.FiscalYearEndDate'
+               'ea.ApprovalStatus',
+               'ea.ApprovalDate',
+               'ea.Comments',
+               'CONCAT(ma.MbrFirstName, " ", ma.MbrFamilyName) AS ApproverName',
             ],
             conditions: $conditions,
             params: $params,

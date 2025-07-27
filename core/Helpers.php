@@ -1,10 +1,10 @@
 <?php
 
-/** Helpers Class
- * This class provides utility functions for input validation, error handling, CORS headers, and logging.
- * It is designed to be used across the application to ensure consistent behavior and reduce code duplication.
- * @package Helpers
- * @version 1.0 
+/** 
+ * Helpers Class
+ * Provides utility functions for validation, error handling, and date calculations.
+ * Includes methods for validating input data, adding CORS headers, calculating date differences,
+ * and sending error responses.
  */
 class Helpers
 {
@@ -12,8 +12,8 @@ class Helpers
      * Validates input data against specified rules.
      * Throws an exception if validation fails.
      * @param array $data The input data to validate.
-     * @param array $rules The validation rules.
-     * @throws Exception If validation fails.
+     * @param array $rules The validation rules, e.g., ['name' => 'required', 'email' => 'email'].
+     * @throws Exception if validation fails with specific error messages.
      */
     public static function validateInput($data, $rules)
     {
@@ -45,8 +45,7 @@ class Helpers
     }
     /**
      * Calculates the quotient and remainder of two numbers.
-     * This is a utility function used to break down time differences into weeks and days.
-     * The quotient is the number of times the dividend fits into the divisor, and the remainder is what is left over after the division.
+     * This is used to determine how many times one number can fit into another and what is left over.
      * @param int $divisor The number to be divided.
      * @param int $dividend The number to divide by.
      * @return array An array containing the quotient and remainder.
@@ -58,10 +57,10 @@ class Helpers
         return array($quotient, $remainder);
     }
     /**
-     * Calculates the time difference from the current time to a given timestamp.
-     * Returns a human-readable string indicating how long ago the time was.
+     * Calculates the difference between the current time and a given timestamp.
+     * Returns a human-readable string indicating how long ago the timestamp was.
      * @param int $time The timestamp to compare against the current time.
-     * @return string A human-readable string indicating the time difference.
+     * @return string A string indicating the time difference (e.g., "2 days ago" or "1 week, 2 days ago").
      */
     public static function calcDateDifference($time)
     {
@@ -122,9 +121,10 @@ class Helpers
         return $date_text;
     }
     /**
-     * Sends a JSON response with an error message.
-     * @param string $message The error message.
-     * @param int $code The HTTP status code (default is 400).
+     * Sends a JSON error response with a specific message and HTTP status code.
+     * Sets the HTTP response code and returns a JSON object with the error message.
+     * @param string $message The error message to return.
+     * @param int $code The HTTP status code to set (default is 400).
      */
     public static function sendError($message, $code = 400)
     {
@@ -133,8 +133,8 @@ class Helpers
         exit;
     }
     /**
-     * Logs an error message to a log file.
-     * Creates the log file if it does not exist.
+     * Logs an error message to a file.
+     * Creates the logs directory if it does not exist.
      * @param string $message The error message to log.
      */
     public static function logError($message)

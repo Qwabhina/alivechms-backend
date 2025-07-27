@@ -5,6 +5,7 @@
  * Implements basic CRUD operations and transactions
  * Supports soft deletes and complex queries with joins
  */
+
 class ORM
 {
     /**

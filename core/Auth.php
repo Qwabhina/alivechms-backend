@@ -225,9 +225,7 @@ class Auth
             return null;
         }
 
-        if (preg_match('/^Bearer\s+([A-Za-z0-9\-_\.]+)/', $authorization, $matches)) {
-            return trim($matches[1]);
-        }
+        if (preg_match('/^Bearer\s+([A-Za-z0-9\-_\.]+)/', $authorization, $matches)) return trim($matches[1]);
 
         Helpers::logError('Invalid Authorization header format: ' . $authorization);
         return null;
@@ -324,7 +322,10 @@ class Auth
     public static function logout($refreshToken)
     {
         self::revokeRefreshToken($refreshToken);
-        return ['message' => 'Logged out successfully'];
+        return [
+            'status' => 'success',
+            'message' => 'Logged out successfully',
+        ];
     }
 }
 ?>

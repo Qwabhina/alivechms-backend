@@ -1,6 +1,7 @@
 <?php
 
-/** Database Management Class
+/** 
+ * Database Management Class
  * Implements Singleton pattern for database connection
  * Uses PDO for secure database interactions
  * Loads configuration from environment variables

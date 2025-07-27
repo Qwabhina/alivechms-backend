@@ -8,9 +8,9 @@
  * Requires authentication via a Bearer token and appropriate permissions.
  */
 
-if (!$token || !Auth::verify($token)) {
-   Helpers::sendError('Unauthorized', 401);
-}
+require_once __DIR__ . '/../core/Expense.php';
+
+if (!$token || !Auth::verify($token)) Helpers::sendError('Unauthorized', 401);
 
 switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
    case 'POST expense/create':
