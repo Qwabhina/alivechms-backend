@@ -58,9 +58,7 @@ try {
 
     ];
 
-    if (!array_key_exists($section, $routes)) {
-        Helpers::sendError('Endpoint not found', 404);
-    }
+    if (!array_key_exists($section, $routes)) Helpers::sendError('Endpoint not found', 404);
 
     require_once __DIR__ . '/routes/' . $routes[$section];
 } catch (Exception $e) {
