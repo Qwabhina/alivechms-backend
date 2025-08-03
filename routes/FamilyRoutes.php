@@ -84,6 +84,6 @@ try {
             throw new Exception('Invalid endpoint or method');
     }
 } catch (Exception $e) {
-    Helpers::sendError($e->getMessage(), 400);
+    Helpers::sendFeedback($e->getMessage(), 400);
 }
 ?>
