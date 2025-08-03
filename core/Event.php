@@ -28,15 +28,15 @@ class Event
          ]);
 
          // Validate date is in the future
-         if (strtotime($data['date']) < time()) Helpers::sendError('Event date must be in the future');
+         if (strtotime($data['date']) < time()) Helpers::sendFeedback('Event date must be in the future');
 
          // Validate branch exists
          $branch = $orm->getWhere('branch', ['BranchID' => $data['branch_id']]);
-         if (empty($branch)) Helpers::sendError('Invalid branch ID');
+         if (empty($branch)) Helpers::sendFeedback('Invalid branch ID');
 
          // Validate creator exists
          $creator = $orm->getWhere('churchmember', ['MbrID' => $data['created_by'], 'Deleted' => 0]);
-         if (empty($creator)) Helpers::sendError('Invalid creator ID');
+         if (empty($creator)) Helpers::sendFeedback('Invalid creator ID');
 
          $orm->beginTransaction();
          $transactionStarted = true;
@@ -66,7 +66,7 @@ class Event
       } catch (Exception $e) {
          if ($transactionStarted && $orm->inTransaction()) $orm->rollBack();
          Helpers::logError('Event create error: ' . $e->getMessage());
-         Helpers::sendError('Event creation failed');
+         Helpers::sendFeedback('Event creation failed');
       }
    }
    /**
@@ -89,15 +89,15 @@ class Event
          ]);
 
          // Validate date is in the future
-         if (strtotime($data['date']) < time()) Helpers::sendError('Event date must be in the future');
+         if (strtotime($data['date']) < time()) Helpers::sendFeedback('Event date must be in the future');
 
          // Validate branch exists
          $branch = $orm->getWhere('branch', ['BranchID' => $data['branch_id']]);
-         if (empty($branch)) Helpers::sendError('Invalid branch ID');
+         if (empty($branch)) Helpers::sendFeedback('Invalid branch ID');
 
          // Validate event exists
          $event = $orm->getWhere('churchevent', ['EventID' => $eventId]);
-         if (empty($event)) Helpers::sendError('Event not found');
+         if (empty($event)) Helpers::sendFeedback('Event not found');
 
          $orm->beginTransaction();
          $transactionStarted = true;
@@ -126,7 +126,7 @@ class Event
          if ($transactionStarted && $orm->inTransaction()) $orm->rollBack();
 
          Helpers::logError('Event update error: ' . $e->getMessage());
-         Helpers::sendError('Event update failed');
+         Helpers::sendFeedback('Event update failed');
       }
    }
    /**
@@ -142,7 +142,7 @@ class Event
       try {
          // Validate event exists
          $event = $orm->getWhere('churchevent', ['EventID' => $eventId]);
-         if (empty($event)) Helpers::sendError('Event not found');
+         if (empty($event)) Helpers::sendFeedback('Event not found');
 
          $orm->beginTransaction();
          $transactionStarted = true;
@@ -157,7 +157,7 @@ class Event
       } catch (Exception $e) {
          if ($transactionStarted && $orm->inTransaction()) $orm->rollBack();
          Helpers::logError('Event delete error: ' . $e->getMessage());
-         Helpers::sendError('Event deletion failed');
+         Helpers::sendFeedback('Event deletion failed');
       }
    }
    /**
@@ -186,12 +186,12 @@ class Event
             params: [':id' => $eventId]
          )[0] ?? null;
 
-         if (!$event) Helpers::sendError('Event not found', 404);
+         if (!$event) Helpers::sendFeedback('Event not found', 404);
 
          return $event;
       } catch (Exception $e) {
          Helpers::logError('Event get error: ' . $e->getMessage());
-         Helpers::sendError('Failed to retrieve event details');
+         Helpers::sendFeedback('Failed to retrieve event details');
       }
    }
    /**
@@ -258,7 +258,7 @@ class Event
          ];
       } catch (Exception $e) {
          Helpers::logError('Event getAll error: ' . $e->getMessage());
-         Helpers::sendError('Failed to retrieve events');
+         Helpers::sendFeedback('Failed to retrieve events');
       }
    }
    /**
@@ -274,15 +274,15 @@ class Event
       $orm = new ORM();
       $transactionStarted = false;
       try {
-         if (!in_array($status, ['Present', 'Absent', 'Excused'])) Helpers::sendError('Invalid attendance status');
+         if (!in_array($status, ['Present', 'Absent', 'Excused'])) Helpers::sendFeedback('Invalid attendance status');
 
          // Validate event exists
          $event = $orm->getWhere('churchevent', ['EventID' => $eventId]);
-         if (empty($event)) Helpers::sendError('Event not found');
+         if (empty($event)) Helpers::sendFeedback('Event not found');
 
          // Validate member exists
          $member = $orm->getWhere('churchmember', ['MbrID' => $memberId, 'Deleted' => 0]);
-         if (empty($member)) Helpers::sendError('Invalid member ID');
+         if (empty($member)) Helpers::sendFeedback('Invalid member ID');
 
          $orm->beginTransaction();
          $transactionStarted = true;
@@ -309,7 +309,7 @@ class Event
          if ($transactionStarted && $orm->inTransaction())  $orm->rollBack();
 
          Helpers::logError('Event attendance error: ' . $e->getMessage());
-         Helpers::sendError('Failed to record attendance');
+         Helpers::sendFeedback('Failed to record attendance');
       }
    }
    /**
@@ -327,11 +327,11 @@ class Event
       try {
          // Validate event exists
          $event = $orm->getWhere('churchevent', ['EventID' => $eventId]);
-         if (empty($event)) Helpers::sendError('Event not found');
+         if (empty($event)) Helpers::sendFeedback('Event not found');
 
          // Validate member exists
          $member = $orm->getWhere('churchmember', ['MbrID' => $memberId, 'Deleted' => 0]);
-         if (empty($member)) Helpers::sendError('Invalid member ID');
+         if (empty($member)) Helpers::sendFeedback('Invalid member ID');
 
          $orm->beginTransaction();
          $transactionStarted = true;
@@ -366,7 +366,7 @@ class Event
          if ($transactionStarted && $orm->inTransaction()) $orm->rollBack();
 
          Helpers::logError('Event volunteer error: ' . $e->getMessage());
-         Helpers::sendError('Failed to assign volunteer');
+         Helpers::sendFeedback('Failed to assign volunteer');
       }
    }
    /**
@@ -385,13 +385,13 @@ class Event
 
          // Validate and add date range filters
          if (!empty($filters['date_from'])) {
-            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['date_from'])) Helpers::sendError('Invalid date_from format. Use YYYY-MM-DD');
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['date_from'])) Helpers::sendFeedback('Invalid date_from format. Use YYYY-MM-DD');
 
             $conditions[] = 'DATE(e.EventDateTime) >= :date_from';
             $params[':date_from'] = $filters['date_from'];
          }
          if (!empty($filters['date_to'])) {
-            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['date_to'])) Helpers::sendError('Invalid date_to format. Use YYYY-MM-DD');
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['date_to'])) Helpers::sendFeedback('Invalid date_to format. Use YYYY-MM-DD');
 
             $conditions[] = 'DATE(e.EventDateTime) <= :date_to';
             $params[':date_to'] = $filters['date_to'];
@@ -416,12 +416,12 @@ class Event
             params: $params
          );
 
-         if (empty($attendance)) Helpers::sendError('No attendance records found for this event');
+         if (empty($attendance)) Helpers::sendFeedback('No attendance records found for this event');
 
          return ['data' => $attendance];
       } catch (Exception $e) {
          Helpers::logError('Event attendance get error: ' . $e->getMessage());
-         Helpers::sendError('Failed to retrieve attendance records');
+         Helpers::sendFeedback('Failed to retrieve attendance records');
       }
    }
    /**
@@ -453,7 +453,7 @@ class Event
          return ['data' => $volunteers];
       } catch (Exception $e) {
          Helpers::logError('Event volunteers get error: ' . $e->getMessage());
-         Helpers::sendError('Failed to retrieve volunteers for this event');
+         Helpers::sendFeedback('Failed to retrieve volunteers for this event');
       }
    }
    /**
@@ -583,10 +583,10 @@ class Event
          $orm->beginTransaction();
          $transactionStarted = true;
          foreach ($attendances as $attendance) {
-            if (!in_array($attendance['status'], ['Present', 'Absent', 'Excused'])) Helpers::sendError('Invalid attendance status for member ' . $attendance['member_id']);
+            if (!in_array($attendance['status'], ['Present', 'Absent', 'Excused'])) Helpers::sendFeedback('Invalid attendance status for member ' . $attendance['member_id']);
 
             $member = $orm->getWhere('churchmember', ['MbrID' => $attendance['member_id'], 'Deleted' => 0]);
-            if (empty($member)) Helpers::sendError('Invalid member ID: ' . $attendance['member_id']);
+            if (empty($member)) Helpers::sendFeedback('Invalid member ID: ' . $attendance['member_id']);
 
             $existing = $orm->getWhere('eventattendance', ['EventID' => $eventId, 'MbrID' => $attendance['member_id']]);
             if (!empty($existing)) {
@@ -609,7 +609,7 @@ class Event
          if ($transactionStarted && $orm->inTransaction()) $orm->rollBack();
 
          Helpers::logError('Bulk attendance error: ' . $e->getMessage());
-         Helpers::sendError('Failed to record bulk attendance');
+         Helpers::sendFeedback('Failed to record bulk attendance');
       }
    }
    /**
@@ -629,10 +629,10 @@ class Event
             throw new Exception('Invalid attendance status');
          }
          $event = $orm->getWhere('churchevent', ['EventID' => $eventId]);
-         if (empty($event)) Helpers::sendError('Event not found');
+         if (empty($event)) Helpers::sendFeedback('Event not found');
 
          $member = $orm->getWhere('churchmember', ['MbrID' => $userId, 'Deleted' => 0]);
-         if (empty($member)) Helpers::sendError('Invalid member ID');
+         if (empty($member)) Helpers::sendFeedback('Invalid member ID');
 
          $orm->beginTransaction();
          $transactionStarted = true;

@@ -40,7 +40,7 @@ class Database
             $this->connection->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
         } catch (PDOException $e) {
             Helpers::logError('Database connection error: ' . $e->getMessage());
-            Helpers::sendError('Database connection failed', 500);
+            Helpers::sendFeedback('Database connection failed', 500);
         }
     }
     /**

@@ -30,20 +30,20 @@ class Contribution
 
          // Validate amount is positive
          if ($data['amount'] <= 0) {
-            Helpers::sendError('Contribution amount must be positive.', 400);
+            Helpers::sendFeedback('Contribution amount must be positive.', 400);
          }
 
          // Validate date format and ensure it's not in the future
          if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $data['date'])) {
-            Helpers::sendError('Invalid date format (YYYY-MM-DD required).', 400);
+            Helpers::sendFeedback('Invalid date format (YYYY-MM-DD required).', 400);
          }
          $dateObj = DateTime::createFromFormat('Y-m-d', $data['date']);
          if (!$dateObj || $dateObj->format('Y-m-d') !== $data['date']) {
-            Helpers::sendError('Invalid date value.', 400);
+            Helpers::sendFeedback('Invalid date value.', 400);
          }
          $currentDate = (new DateTime())->format('Y-m-d');
          if ($data['date'] > $currentDate) {
-            Helpers::sendError('Contribution date cannot be in the future.', 400);
+            Helpers::sendFeedback('Contribution date cannot be in the future.', 400);
          }
 
          // Validate foreign keys in a single query
@@ -62,16 +62,16 @@ class Contribution
          );
 
          if ($validationQuery[0]['member_exists'] == 0) {
-            Helpers::sendError('Invalid Member ID: Member does not exist or is deleted.', 400);
+            Helpers::sendFeedback('Invalid Member ID: Member does not exist or is deleted.', 400);
          }
          if ($validationQuery[0]['type_exists'] == 0) {
-            Helpers::sendError('Invalid Contribution Type ID.', 400);
+            Helpers::sendFeedback('Invalid Contribution Type ID.', 400);
          }
          if ($validationQuery[0]['payment_exists'] == 0) {
-            Helpers::sendError('Invalid Payment Option ID.', 400);
+            Helpers::sendFeedback('Invalid Payment Option ID.', 400);
          }
          if ($validationQuery[0]['fiscal_year_exists'] == 0) {
-            Helpers::sendError('Invalid Fiscal Year ID.', 400);
+            Helpers::sendFeedback('Invalid Fiscal Year ID.', 400);
          }
 
          $orm->beginTransaction();
@@ -119,7 +119,7 @@ class Contribution
             $errorMessage = 'Database constraint violation (e.g., invalid foreign key).';
          }
          Helpers::logError('Contribution create error: ' . $e->getMessage());
-         Helpers::sendError($errorMessage, 400);
+         Helpers::sendFeedback($errorMessage, 400);
       }
    }
 
@@ -145,20 +145,20 @@ class Contribution
 
          // Validate amount is positive
          if ($data['amount'] <= 0) {
-            Helpers::sendError('Contribution amount must be positive.', 400);
+            Helpers::sendFeedback('Contribution amount must be positive.', 400);
          }
 
          // Validate date format and ensure it's not in the future
          if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $data['date'])) {
-            Helpers::sendError('Invalid date format (YYYY-MM-DD required).', 400);
+            Helpers::sendFeedback('Invalid date format (YYYY-MM-DD required).', 400);
          }
          $dateObj = DateTime::createFromFormat('Y-m-d', $data['date']);
          if (!$dateObj || $dateObj->format('Y-m-d') !== $data['date']) {
-            Helpers::sendError('Invalid date value.', 400);
+            Helpers::sendFeedback('Invalid date value.', 400);
          }
          $currentDate = (new DateTime())->format('Y-m-d');
          if ($data['date'] > $currentDate) {
-            Helpers::sendError('Contribution date cannot be in the future.', 400);
+            Helpers::sendFeedback('Contribution date cannot be in the future.', 400);
          }
 
          // Validate contribution exists and is not soft-deleted
@@ -167,7 +167,7 @@ class Contribution
             'Deleted' => '0'
          ]);
          if (empty($contribution)) {
-            Helpers::sendError('Contribution not found or has been deleted.', 400);
+            Helpers::sendFeedback('Contribution not found or has been deleted.', 400);
          }
 
          // Validate foreign keys in a single query
@@ -185,10 +185,10 @@ class Contribution
             ]
          );
 
-         if ($validationQuery[0]['type_exists'] == 0) Helpers::sendError('Invalid Contribution Type ID.', 400);
-         if ($validationQuery[0]['payment_exists'] == 0) Helpers::sendError('Invalid Payment Option ID.', 400);
-         if ($validationQuery[0]['member_exists'] == 0) Helpers::sendError('Member Not Found.', 400);
-         if ($validationQuery[0]['fiscal_year_exists'] == 0) Helpers::sendError('Invalid Fiscal Year ID.', 400);
+         if ($validationQuery[0]['type_exists'] == 0) Helpers::sendFeedback('Invalid Contribution Type ID.', 400);
+         if ($validationQuery[0]['payment_exists'] == 0) Helpers::sendFeedback('Invalid Payment Option ID.', 400);
+         if ($validationQuery[0]['member_exists'] == 0) Helpers::sendFeedback('Member Not Found.', 400);
+         if ($validationQuery[0]['fiscal_year_exists'] == 0) Helpers::sendFeedback('Invalid Fiscal Year ID.', 400);
 
          $orm->beginTransaction();
 
@@ -213,7 +213,7 @@ class Contribution
             $errorMessage = 'Database constraint violation (e.g., invalid foreign key).';
          }
          Helpers::logError('Contribution update error: ' . $e->getMessage());
-         Helpers::sendError($errorMessage, 400);
+         Helpers::sendFeedback($errorMessage, 400);
       }
    }
 
@@ -233,7 +233,7 @@ class Contribution
             'Deleted' => 0
          ]);
          if (empty($contribution)) {
-            Helpers::sendError('Contribution not found or already deleted.');
+            Helpers::sendFeedback('Contribution not found or already deleted.');
          }
 
          $orm->beginTransaction();
@@ -250,7 +250,7 @@ class Contribution
             $orm->rollBack();
          }
          Helpers::logError('Contribution soft delete error: ' . $e->getMessage());
-         Helpers::sendError('Contribution soft delete failed: ' . $e->getMessage());
+         Helpers::sendFeedback('Contribution soft delete failed: ' . $e->getMessage());
       }
    }
 
@@ -269,7 +269,7 @@ class Contribution
             'Deleted' => 1
          ]);
          if (empty($contribution)) {
-            Helpers::sendError('Contribution not found or not deleted.');
+            Helpers::sendFeedback('Contribution not found or not deleted.');
          }
 
          $orm->beginTransaction();
@@ -286,7 +286,7 @@ class Contribution
             $orm->rollBack();
          }
          Helpers::logError('Contribution restore error: ' . $e->getMessage());
-         Helpers::sendError('Contribution restore failed: ' . $e->getMessage());
+         Helpers::sendFeedback('Contribution restore failed: ' . $e->getMessage());
       }
    }
 
@@ -319,13 +319,13 @@ class Contribution
             params: [':id' => $contributionId, ':deleted' => 0]
          )[0] ?? null;
 
-         if (!$contribution) Helpers::sendError('Contribution not found');
+         if (!$contribution) Helpers::sendFeedback('Contribution not found');
 
          return $contribution;
       } catch (Exception $e) {
          Helpers::logError('Contribution get error: ' . $e->getMessage());
-         Helpers::sendError('Contribution get error: ' . $e->getMessage());
-         // Helpers::sendError('Contribution retrieval error.');
+         Helpers::sendFeedback('Contribution get error: ' . $e->getMessage());
+         // Helpers::sendFeedback('Contribution retrieval error.');
       }
    }
 
@@ -356,7 +356,7 @@ class Contribution
                $conditions[] = ['column' => 'c.ContributionDate', 'operator' => '>=', 'placeholder' => ':start_date'];
                $params[':start_date'] = $filters['start_date'];
             } else {
-               Helpers::sendError('Invalid start_date format.');
+               Helpers::sendFeedback('Invalid start_date format.');
             }
          }
          if (!empty($filters['end_date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['end_date'])) {
@@ -365,7 +365,7 @@ class Contribution
                $conditions[] = ['column' => 'c.ContributionDate', 'operator' => '<=', 'placeholder' => ':end_date'];
                $params[':end_date'] = $filters['end_date'];
             } else {
-               Helpers::sendError('Invalid end_date format.');
+               Helpers::sendFeedback('Invalid end_date format.');
             }
          }
          if (!empty($filters['fiscal_year']) && is_numeric($filters['fiscal_year'])) {
@@ -381,12 +381,12 @@ class Contribution
          if (!empty($filters['fiscal_year']) && !empty($filters['start_date']) && !empty($filters['end_date'])) {
             $fiscalYearData = $orm->getWhere('fiscalyear', ['FiscalYearID' => $filters['fiscal_year']]);
 
-            if (empty($fiscalYearData)) Helpers::sendError('Invalid FiscalYearID: No fiscal year found.');
+            if (empty($fiscalYearData)) Helpers::sendFeedback('Invalid FiscalYearID: No fiscal year found.');
 
             $fiscalStart = $fiscalYearData[0]['FiscalYearStartDate'];
             $fiscalEnd = $fiscalYearData[0]['FiscalYearEndDate'];
 
-            if ($filters['start_date'] < $fiscalStart || $filters['end_date'] > $fiscalEnd) Helpers::sendError("Date range must be within fiscal year boundaries ($fiscalStart to $fiscalEnd).");
+            if ($filters['start_date'] < $fiscalStart || $filters['end_date'] > $fiscalEnd) Helpers::sendFeedback("Date range must be within fiscal year boundaries ($fiscalStart to $fiscalEnd).");
          }
 
          // Add deleted condition
@@ -435,7 +435,7 @@ class Contribution
          ];
       } catch (Exception $e) {
          Helpers::logError('Contribution getAll error: ' . $e->getMessage());
-         Helpers::sendError('Failed to retrieve contributions: ' . $e->getMessage());
+         Helpers::sendFeedback('Failed to retrieve contributions: ' . $e->getMessage());
       }
    }
 
@@ -451,36 +451,36 @@ class Contribution
       try {
          // Ensure at least one of start_date, end_date, or fiscal_year is provided
          if (empty($filters['start_date']) && empty($filters['end_date']) && empty($filters['fiscal_year'])) {
-            Helpers::sendError('At least one of start_date, end_date, or fiscal_year is required.', 400);
+            Helpers::sendFeedback('At least one of start_date, end_date, or fiscal_year is required.', 400);
          }
 
          // Validate date formats and values
          if (!empty($filters['start_date'])) {
             if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['start_date'])) {
-               Helpers::sendError('Invalid start_date format (YYYY-MM-DD required).', 400);
+               Helpers::sendFeedback('Invalid start_date format (YYYY-MM-DD required).', 400);
             }
             $startDateObj = DateTime::createFromFormat('Y-m-d', $filters['start_date']);
             if (!$startDateObj || $startDateObj->format('Y-m-d') !== $filters['start_date']) {
-               Helpers::sendError('Invalid start_date value.', 400);
+               Helpers::sendFeedback('Invalid start_date value.', 400);
             }
          }
          if (!empty($filters['end_date'])) {
             if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['end_date'])) {
-               Helpers::sendError('Invalid end_date format (YYYY-MM-DD required).', 400);
+               Helpers::sendFeedback('Invalid end_date format (YYYY-MM-DD required).', 400);
             }
             $endDateObj = DateTime::createFromFormat('Y-m-d', $filters['end_date']);
             if (!$endDateObj || $endDateObj->format('Y-m-d') !== $filters['end_date']) {
-               Helpers::sendError('Invalid end_date value.', 400);
+               Helpers::sendFeedback('Invalid end_date value.', 400);
             }
          }
          if (!empty($filters['start_date']) && !empty($filters['end_date']) && $filters['start_date'] > $filters['end_date']) {
-            Helpers::sendError('start_date cannot be after end_date.', 400);
+            Helpers::sendFeedback('start_date cannot be after end_date.', 400);
          }
 
          // Validate fiscal year and date range compatibility
          if (!empty($filters['fiscal_year'])) {
             if (!is_numeric($filters['fiscal_year'])) {
-               Helpers::sendError('Invalid fiscal_year: Must be numeric.', 400);
+               Helpers::sendFeedback('Invalid fiscal_year: Must be numeric.', 400);
             }
             if (!empty($filters['start_date']) && !empty($filters['end_date'])) {
                $fiscalYearData = $orm->runQuery(
@@ -488,12 +488,12 @@ class Contribution
                   [':fiscal_year' => $filters['fiscal_year']]
                );
                if (empty($fiscalYearData)) {
-                  Helpers::sendError('Invalid fiscal_year: No fiscal year found.', 400);
+                  Helpers::sendFeedback('Invalid fiscal_year: No fiscal year found.', 400);
                }
                $fiscalStart = $fiscalYearData[0]['StartDate'];
                $fiscalEnd = $fiscalYearData[0]['EndDate'];
                if ($filters['start_date'] < $fiscalStart || $filters['end_date'] > $fiscalEnd) {
-                  Helpers::sendError(
+                  Helpers::sendFeedback(
                      "Date range must be within fiscal year boundaries ($fiscalStart to $fiscalEnd).",
                      400
                   );
@@ -503,10 +503,10 @@ class Contribution
 
          // Validate payment_option and contribution_type
          if (!empty($filters['payment_option']) && !is_numeric($filters['payment_option'])) {
-            Helpers::sendError('Invalid payment_option: Must be numeric.', 400);
+            Helpers::sendFeedback('Invalid payment_option: Must be numeric.', 400);
          }
          if (!empty($filters['contribution_type']) && !is_numeric($filters['contribution_type'])) {
-            Helpers::sendError('Invalid contribution_type: Must be numeric.', 400);
+            Helpers::sendFeedback('Invalid contribution_type: Must be numeric.', 400);
          }
 
          // Build WHERE clause
@@ -554,7 +554,7 @@ class Contribution
          return ['average_contribution' => number_format($average, 2)];
       } catch (Exception $e) {
          Helpers::logError('Contribution average error: ' . $e->getMessage());
-         Helpers::sendError('Failed to retrieve average contribution: ' . $e->getMessage(), 400);
+         Helpers::sendFeedback('Failed to retrieve average contribution: ' . $e->getMessage(), 400);
       }
    }
 
@@ -570,36 +570,36 @@ class Contribution
       try {
          // Ensure at least one of start_date, end_date, or fiscal_year is provided
          if (empty($filters['start_date']) && empty($filters['end_date']) && empty($filters['fiscal_year'])) {
-            Helpers::sendError('At least one of start_date, end_date, or fiscal_year is required.', 400);
+            Helpers::sendFeedback('At least one of start_date, end_date, or fiscal_year is required.', 400);
          }
 
          // Validate date formats and values
          if (!empty($filters['start_date'])) {
             if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['start_date'])) {
-               Helpers::sendError('Invalid start_date format (YYYY-MM-DD required).', 400);
+               Helpers::sendFeedback('Invalid start_date format (YYYY-MM-DD required).', 400);
             }
             $startDateObj = DateTime::createFromFormat('Y-m-d', $filters['start_date']);
             if (!$startDateObj || $startDateObj->format('Y-m-d') !== $filters['start_date']) {
-               Helpers::sendError('Invalid start_date value.', 400);
+               Helpers::sendFeedback('Invalid start_date value.', 400);
             }
          }
          if (!empty($filters['end_date'])) {
             if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['end_date'])) {
-               Helpers::sendError('Invalid end_date format (YYYY-MM-DD required).', 400);
+               Helpers::sendFeedback('Invalid end_date format (YYYY-MM-DD required).', 400);
             }
             $endDateObj = DateTime::createFromFormat('Y-m-d', $filters['end_date']);
             if (!$endDateObj || $endDateObj->format('Y-m-d') !== $filters['end_date']) {
-               Helpers::sendError('Invalid end_date value.', 400);
+               Helpers::sendFeedback('Invalid end_date value.', 400);
             }
          }
          if (!empty($filters['start_date']) && !empty($filters['end_date']) && $filters['start_date'] > $filters['end_date']) {
-            Helpers::sendError('start_date cannot be after end_date.', 400);
+            Helpers::sendFeedback('start_date cannot be after end_date.', 400);
          }
 
          // Validate fiscal year and date range compatibility
          if (!empty($filters['fiscal_year'])) {
             if (!is_numeric($filters['fiscal_year'])) {
-               Helpers::sendError('Invalid fiscal_year: Must be numeric.', 400);
+               Helpers::sendFeedback('Invalid fiscal_year: Must be numeric.', 400);
             }
             if (!empty($filters['start_date']) && !empty($filters['end_date'])) {
                $fiscalYearData = $orm->runQuery(
@@ -607,12 +607,12 @@ class Contribution
                   [':fiscal_year' => $filters['fiscal_year']]
                );
                if (empty($fiscalYearData)) {
-                  Helpers::sendError('Invalid fiscal_year: No fiscal year found.', 400);
+                  Helpers::sendFeedback('Invalid fiscal_year: No fiscal year found.', 400);
                }
                $fiscalStart = $fiscalYearData[0]['StartDate'];
                $fiscalEnd = $fiscalYearData[0]['EndDate'];
                if ($filters['start_date'] < $fiscalStart || $filters['end_date'] > $fiscalEnd) {
-                  Helpers::sendError(
+                  Helpers::sendFeedback(
                      "Date range must be within fiscal year boundaries ($fiscalStart to $fiscalEnd).",
                      400
                   );
@@ -622,13 +622,13 @@ class Contribution
 
          // Validate payment_option, contribution_type, and contributor_id
          if (!empty($filters['payment_option']) && !is_numeric($filters['payment_option'])) {
-            Helpers::sendError('Invalid payment_option: Must be numeric.', 400);
+            Helpers::sendFeedback('Invalid payment_option: Must be numeric.', 400);
          }
          if (!empty($filters['contribution_type']) && !is_numeric($filters['contribution_type'])) {
-            Helpers::sendError('Invalid contribution_type: Must be numeric.', 400);
+            Helpers::sendFeedback('Invalid contribution_type: Must be numeric.', 400);
          }
          if (!empty($filters['contributor_id']) && !is_numeric($filters['contributor_id'])) {
-            Helpers::sendError('Invalid contributor_id: Must be numeric.', 400);
+            Helpers::sendFeedback('Invalid contributor_id: Must be numeric.', 400);
          }
 
          // Build WHERE clause
@@ -676,7 +676,7 @@ class Contribution
          return ['total_contribution' => number_format($total, 2)];
       } catch (Exception $e) {
          Helpers::logError('Contribution total error: ' . $e->getMessage());
-         Helpers::sendError('Failed to retrieve total contribution: ' . $e->getMessage(), 400);
+         Helpers::sendFeedback('Failed to retrieve total contribution: ' . $e->getMessage(), 400);
       }
    }
 }

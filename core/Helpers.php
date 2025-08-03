@@ -126,10 +126,10 @@ class Helpers
      * @param string $message The error message to return.
      * @param int $code The HTTP status code to set (default is 400).
      */
-    public static function sendError($message, $code = 400)
+    public static function sendFeedback($message, $code = 400, $type = "error")
     {
         http_response_code($code);
-        echo json_encode(['error' => $message, 'code' => $code]);
+        echo json_encode([$type => $message, 'code' => $code]);
         exit;
     }
     /**

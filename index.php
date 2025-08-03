@@ -55,13 +55,12 @@ try {
         'role' => 'RoleRoutes.php',
         // 'search' => 'SearchRoutes.php',
         // 'upload' => 'UploadRoutes.php',
-
     ];
 
-    if (!array_key_exists($section, $routes)) Helpers::sendError('Endpoint not found', 404);
+    if (!array_key_exists($section, $routes)) Helpers::sendFeedback('Endpoint not found', 404);
 
     require_once __DIR__ . '/routes/' . $routes[$section];
 } catch (Exception $e) {
-    Helpers::sendError($e->getMessage(), 400);
+    Helpers::sendFeedback($e->getMessage(), 400);
 }
 ?>
