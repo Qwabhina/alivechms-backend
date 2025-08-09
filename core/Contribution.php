@@ -29,22 +29,16 @@ class Contribution
          ]);
 
          // Validate amount is positive
-         if ($data['amount'] <= 0) {
-            Helpers::sendFeedback('Contribution amount must be positive.', 400);
-         }
+         if ($data['amount'] <= 0) Helpers::sendFeedback('Contribution amount must be positive.', 400);
 
          // Validate date format and ensure it's not in the future
-         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $data['date'])) {
-            Helpers::sendFeedback('Invalid date format (YYYY-MM-DD required).', 400);
-         }
+         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $data['date'])) Helpers::sendFeedback('Invalid date format (YYYY-MM-DD required).', 400);
+         // Create DateTime object to validate date
          $dateObj = DateTime::createFromFormat('Y-m-d', $data['date']);
-         if (!$dateObj || $dateObj->format('Y-m-d') !== $data['date']) {
-            Helpers::sendFeedback('Invalid date value.', 400);
-         }
+         if (!$dateObj || $dateObj->format('Y-m-d') !== $data['date']) Helpers::sendFeedback('Invalid date value.', 400);
+         // Ensure date is not in the future
          $currentDate = (new DateTime())->format('Y-m-d');
-         if ($data['date'] > $currentDate) {
-            Helpers::sendFeedback('Contribution date cannot be in the future.', 400);
-         }
+         if ($data['date'] > $currentDate) Helpers::sendFeedback('Contribution date cannot be in the future.', 400);
 
          // Validate foreign keys in a single query
          $validationQuery = $orm->runQuery(
@@ -61,18 +55,10 @@ class Contribution
             ]
          );
 
-         if ($validationQuery[0]['member_exists'] == 0) {
-            Helpers::sendFeedback('Invalid Member ID: Member does not exist or is deleted.', 400);
-         }
-         if ($validationQuery[0]['type_exists'] == 0) {
-            Helpers::sendFeedback('Invalid Contribution Type ID.', 400);
-         }
-         if ($validationQuery[0]['payment_exists'] == 0) {
-            Helpers::sendFeedback('Invalid Payment Option ID.', 400);
-         }
-         if ($validationQuery[0]['fiscal_year_exists'] == 0) {
-            Helpers::sendFeedback('Invalid Fiscal Year ID.', 400);
-         }
+         if ($validationQuery[0]['member_exists'] == 0) Helpers::sendFeedback('Invalid Member ID: Member does not exist or is deleted.', 400);
+         if ($validationQuery[0]['type_exists'] == 0) Helpers::sendFeedback('Invalid Contribution Type ID.', 400);
+         if ($validationQuery[0]['payment_exists'] == 0) Helpers::sendFeedback('Invalid Payment Option ID.', 400);
+         if ($validationQuery[0]['fiscal_year_exists'] == 0) Helpers::sendFeedback('Invalid Fiscal Year ID.', 400);
 
          $orm->beginTransaction();
 
@@ -88,25 +74,25 @@ class Contribution
          ])['id'];
 
          // Create notifications for admins with view_contributions permission
-         $adminUsers = $orm->runQuery(
-            'SELECT DISTINCT u.MbrID
-             FROM userauthentication u
-             INNER JOIN memberrole mr ON u.MbrID = mr.MbrID
-             INNER JOIN churchrole cr ON mr.ChurchRoleID = cr.RoleID
-             INNER JOIN rolepermission rp ON cr.RoleID = rp.ChurchRoleID
-             INNER JOIN permission p ON rp.PermissionID = p.PermissionID
-             WHERE p.PermissionName = :permission',
-            [':permission' => 'view_contributions']
-         );
+         // $adminUsers = $orm->runQuery(
+         //    'SELECT DISTINCT u.MbrID
+         //     FROM userauthentication u
+         //     INNER JOIN memberrole mr ON u.MbrID = mr.MbrID
+         //     INNER JOIN churchrole cr ON mr.ChurchRoleID = cr.RoleID
+         //     INNER JOIN rolepermission rp ON cr.RoleID = rp.ChurchRoleID
+         //     INNER JOIN permission p ON rp.PermissionID = p.PermissionID
+         //     WHERE p.PermissionName = :permission',
+         //    [':permission' => 'view_contributions']
+         // );
 
-         foreach ($adminUsers as $admin) {
-            $orm->insert('communication', [
-               'Title' => 'New Contribution Submitted',
-               'Message' => "Contribution of {$data['amount']} submitted by member ID {$data['member_id']} on {$data['date']}.",
-               'SentBy' => $data['member_id'],
-               'TargetGroupID' => null
-            ]);
-         }
+         // foreach ($adminUsers as $admin) {
+         //    $orm->insert('communication', [
+         //       'Title' => 'New Contribution Submitted',
+         //       'Message' => "Contribution of {$data['amount']} submitted by member ID {$data['member_id']} on {$data['date']}.",
+         //       'SentBy' => $data['member_id'],
+         //       'TargetGroupID' => null
+         //    ]);
+         // }
 
          $orm->commit();
          return ['status' => 'success', 'contribution_id' => $contributionId];
@@ -116,7 +102,7 @@ class Contribution
          }
          $errorMessage = 'Failed to create contribution: ' . $e->getMessage();
          if (strpos($e->getMessage(), 'SQLSTATE[23000]') !== false) {
-            $errorMessage = 'Database constraint violation (e.g., invalid foreign key).';
+            $errorMessage = 'Database constraint violation';
          }
          Helpers::logError('Contribution create error: ' . $e->getMessage());
          Helpers::sendFeedback($errorMessage, 400);
@@ -450,64 +436,44 @@ class Contribution
       $orm = new ORM();
       try {
          // Ensure at least one of start_date, end_date, or fiscal_year is provided
-         if (empty($filters['start_date']) && empty($filters['end_date']) && empty($filters['fiscal_year'])) {
-            Helpers::sendFeedback('At least one of start_date, end_date, or fiscal_year is required.', 400);
-         }
+         if (empty($filters['start_date']) && empty($filters['end_date']) && empty($filters['fiscal_year'])) Helpers::sendFeedback('At least one of start_date, end_date, or fiscal_year is required.', 400);
 
          // Validate date formats and values
          if (!empty($filters['start_date'])) {
-            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['start_date'])) {
-               Helpers::sendFeedback('Invalid start_date format (YYYY-MM-DD required).', 400);
-            }
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['start_date']))  Helpers::sendFeedback('Invalid start_date format (YYYY-MM-DD required).', 400);
+
             $startDateObj = DateTime::createFromFormat('Y-m-d', $filters['start_date']);
-            if (!$startDateObj || $startDateObj->format('Y-m-d') !== $filters['start_date']) {
-               Helpers::sendFeedback('Invalid start_date value.', 400);
-            }
+            if (!$startDateObj || $startDateObj->format('Y-m-d') !== $filters['start_date']) Helpers::sendFeedback('Invalid start_date value.', 400);
          }
+
+         // Validate end_date format and ensure it's not in the future
          if (!empty($filters['end_date'])) {
-            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['end_date'])) {
-               Helpers::sendFeedback('Invalid end_date format (YYYY-MM-DD required).', 400);
-            }
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['end_date'])) Helpers::sendFeedback('Invalid end_date format (YYYY-MM-DD required).', 400);
+
             $endDateObj = DateTime::createFromFormat('Y-m-d', $filters['end_date']);
-            if (!$endDateObj || $endDateObj->format('Y-m-d') !== $filters['end_date']) {
-               Helpers::sendFeedback('Invalid end_date value.', 400);
-            }
+            if (!$endDateObj || $endDateObj->format('Y-m-d') !== $filters['end_date']) Helpers::sendFeedback('Invalid end_date value.', 400);
          }
-         if (!empty($filters['start_date']) && !empty($filters['end_date']) && $filters['start_date'] > $filters['end_date']) {
-            Helpers::sendFeedback('start_date cannot be after end_date.', 400);
-         }
+
+         // Ensure start_date is before end_date
+         if (!empty($filters['start_date']) && !empty($filters['end_date']) && $filters['start_date'] > $filters['end_date']) Helpers::sendFeedback('start_date cannot be after end_date.', 400);
 
          // Validate fiscal year and date range compatibility
          if (!empty($filters['fiscal_year'])) {
-            if (!is_numeric($filters['fiscal_year'])) {
-               Helpers::sendFeedback('Invalid fiscal_year: Must be numeric.', 400);
-            }
+            if (!is_numeric($filters['fiscal_year'])) Helpers::sendFeedback('Invalid fiscal_year: Must be numeric.', 400);
+
             if (!empty($filters['start_date']) && !empty($filters['end_date'])) {
-               $fiscalYearData = $orm->runQuery(
-                  'SELECT StartDate, EndDate FROM fiscalyear WHERE FiscalYearID = :fiscal_year',
-                  [':fiscal_year' => $filters['fiscal_year']]
-               );
-               if (empty($fiscalYearData)) {
-                  Helpers::sendFeedback('Invalid fiscal_year: No fiscal year found.', 400);
-               }
+               $fiscalYearData = $orm->runQuery('SELECT StartDate, EndDate FROM fiscalyear WHERE FiscalYearID = :fiscal_year', [':fiscal_year' => $filters['fiscal_year']]);
+               if (empty($fiscalYearData)) Helpers::sendFeedback('Invalid fiscal_year: No fiscal year found.', 400);
                $fiscalStart = $fiscalYearData[0]['StartDate'];
                $fiscalEnd = $fiscalYearData[0]['EndDate'];
-               if ($filters['start_date'] < $fiscalStart || $filters['end_date'] > $fiscalEnd) {
-                  Helpers::sendFeedback(
-                     "Date range must be within fiscal year boundaries ($fiscalStart to $fiscalEnd).",
-                     400
-                  );
-               }
+               if ($filters['start_date'] < $fiscalStart || $filters['end_date'] > $fiscalEnd) Helpers::sendFeedback("Date range must be within fiscal year boundaries ($fiscalStart to $fiscalEnd).", 400);
             }
          }
 
          // Validate payment_option and contribution_type
-         if (!empty($filters['payment_option']) && !is_numeric($filters['payment_option'])) {
-            Helpers::sendFeedback('Invalid payment_option: Must be numeric.', 400);
-         }
-         if (!empty($filters['contribution_type']) && !is_numeric($filters['contribution_type'])) {
-            Helpers::sendFeedback('Invalid contribution_type: Must be numeric.', 400);
-         }
+         if (!empty($filters['payment_option']) && !is_numeric($filters['payment_option'])) Helpers::sendFeedback('Invalid payment_option: Must be numeric.', 400);
+
+         if (!empty($filters['contribution_type']) && !is_numeric($filters['contribution_type'])) Helpers::sendFeedback('Invalid contribution_type: Must be numeric.', 400);
 
          // Build WHERE clause
          $conditions = [];
