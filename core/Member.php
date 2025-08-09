@@ -29,7 +29,7 @@ class Member
             ]);
 
             $existing = $orm->getWhere('userauthentication', ['Username' => $data['username']]);
-            if ($existing) Helpers::sendError('Username already exists');
+            if ($existing) Helpers::sendFeedback('Username already exists');
 
             $mbrId = $orm->insert('churchmember', [
                 'MbrFirstName' => $data['first_name'],
@@ -66,7 +66,7 @@ class Member
             return ['status' => 'success', 'mbr_id' => $mbrId];
         } catch (Exception $e) {
             Helpers::logError('Member register error: ' . $e->getMessage());
-            Helpers::sendError($e->getMessage(), 400);
+            Helpers::sendFeedback($e->getMessage(), 400);
         }
     }
     /**
@@ -115,7 +115,7 @@ class Member
             return ['status' => 'success', 'mbr_id' => $mbrId];
         } catch (Exception $e) {
             Helpers::logError('Member update error: ' . $e->getMessage());
-            Helpers::sendError($e->getMessage(), 400);
+            Helpers::sendFeedback($e->getMessage(), 400);
         }
     }
     /**
@@ -133,7 +133,7 @@ class Member
             return ['status' => 'success'];
         } catch (Exception $e) {
             Helpers::logError('Member delete error: ' . $e->getMessage());
-            Helpers::sendError('Failed to delete member', 400);
+            Helpers::sendFeedback('Failed to delete member', 400);
         }
     }
     /**
@@ -174,7 +174,7 @@ class Member
             ];
         } catch (Exception $e) {
             Helpers::logError('Member list error: ' . $e->getMessage());
-            Helpers::sendError('Failed to retrieve members', 400);
+            Helpers::sendFeedback('Failed to retrieve members', 400);
         }
     }
     /**
@@ -198,11 +198,11 @@ class Member
                 params: [':id' => $mbrId]
             )[0] ?? null;
 
-            if (!$member) Helpers::sendError('Member not found');
+            if (!$member) Helpers::sendFeedback('Member not found');
             return $member;
         } catch (Exception $e) {
             Helpers::logError('Member get error: ' . $e->getMessage());
-            Helpers::sendError('Failed to retrieve member', 400);
+            Helpers::sendFeedback('Failed to retrieve member', 400);
         }
     }
 }
