@@ -10,7 +10,7 @@ class Contribution
 {
    /**
     * Create a new contribution entry
-    * @param array $data Array containing required fields: amount, date, contribution_type_id, member_id, payment_option_id, fiscal_year_id
+    * @param array $data Array containing contribution details: amount, date, contribution_type_id, member_id, payment_option_id, fiscal_year_id
     * @return array Success status and contribution ID
     * @throws Exception if validation fails or database operations fail
     */
