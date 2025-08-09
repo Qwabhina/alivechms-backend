@@ -113,6 +113,7 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
 
         $mbrId = $pathParts[2] ?? null;
         if (!$mbrId) Helpers::sendFeedback('Member ID required', 400);
+        if (!is_numeric($mbrId)) Helpers::sendFeedback('Invalid Member ID', 400);
 
         try {
             $member = Member::get($mbrId);
