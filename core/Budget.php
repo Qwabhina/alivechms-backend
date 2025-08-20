@@ -49,7 +49,7 @@ class Budget
       } catch (Exception $e) {
          if ($transactionStarted && $orm->inTransaction()) $orm->rollBack();
          Helpers::logError('Budget create error: ' . $e->getMessage());
-         Helpers::sendError('Budget creation failed: ' . $e->getMessage(), 400);
+         Helpers::sendFeedback('Budget creation failed: ' . $e->getMessage(), 400);
       }
    }
 
@@ -72,11 +72,11 @@ class Budget
          ]);
 
          // Validate amount is positive
-         if ($data['amount'] <= 0) Helpers::sendError('Item amount must be positive', 400);
+         if ($data['amount'] <= 0) Helpers::sendFeedback('Item amount must be positive', 400);
 
          // Validate budget exists
          $budget = $orm->getWhere('churchbudget', ['BudgetID' => $budgetId]);
-         if (empty($budget)) Helpers::sendError('Budget not found', 404);
+         if (empty($budget)) Helpers::sendFeedback('Budget not found', 404);
 
          // Validate subcategory exists and matches category
          $subcategory = $orm->getWhere(
@@ -86,7 +86,7 @@ class Budget
                'Category' => $data['category']
             ]
          );
-         if (empty($subcategory)) Helpers::sendError('Invalid subcategory for category', 400);
+         if (empty($subcategory)) Helpers::sendFeedback('Invalid subcategory for category', 400);
 
          $itemId = $orm->insert('budget_items', [
             'BudgetID' => $budgetId,
@@ -99,7 +99,7 @@ class Budget
          return ['status' => 'success', 'item_id' => $itemId];
       } catch (Exception $e) {
          Helpers::logError('Budget item create error: ' . $e->getMessage());
-         Helpers::sendError('Budget item creation failed: ' . $e->getMessage(), 400);
+         Helpers::sendFeedback('Budget item creation failed: ' . $e->getMessage(), 400);
       }
    }
 
@@ -123,10 +123,10 @@ class Budget
 
          // Validate budget exists
          $budget = $orm->getWhere('churchbudget', ['BudgetID' => $budgetId]);
-         if (empty($budget)) Helpers::sendError('Budget not found', 404);
+         if (empty($budget)) Helpers::sendFeedback('Budget not found', 404);
 
          // Prevent updating approved budgets
-         if ($budget[0]['BudgetStatus'] === 'Approved') Helpers::sendError('Cannot update an approved budget', 400);
+         if ($budget[0]['BudgetStatus'] === 'Approved') Helpers::sendFeedback('Cannot update an approved budget', 400);
 
          $orm->beginTransaction();
          $transactionStarted = true;
@@ -154,7 +154,7 @@ class Budget
       } catch (Exception $e) {
          if ($transactionStarted && $orm->inTransaction()) $orm->rollBack();
          Helpers::logError('Budget update error: ' . $e->getMessage());
-         Helpers::sendError('Budget update failed: ' . $e->getMessage(), 400);
+         Helpers::sendFeedback('Budget update failed: ' . $e->getMessage(), 400);
       }
    }
 
@@ -178,22 +178,22 @@ class Budget
 
          // Validate item exists
          $item = $orm->getWhere('budget_items', ['ItemID' => $itemId]);
-         if (empty($item)) Helpers::sendError('Budget item not found', 404);
+         if (empty($item)) Helpers::sendFeedback('Budget item not found', 404);
 
          // Validate budget is not approved
          $budget = $orm->getWhere('churchbudget', ['BudgetID' => $item[0]['BudgetID']]);
-         if ($budget[0]['BudgetStatus'] === 'Approved') Helpers::sendError('Cannot edit items of approved budget', 400);
+         if ($budget[0]['BudgetStatus'] === 'Approved') Helpers::sendFeedback('Cannot edit items of approved budget', 400);
 
          // Validate subcategory if provided
          if (isset($data['subcategory_id']) && isset($data['category'])) {
             $subcategory = $orm->getWhere('budget_item_category', ['SubcategoryID' => $data['subcategory_id'], 'Category' => $data['category']]);
-            if (empty($subcategory)) Helpers::sendError('Invalid subcategory for category', 400);
+            if (empty($subcategory)) Helpers::sendFeedback('Invalid subcategory for category', 400);
          }
 
          $updateData = [];
          if (isset($data['item_name'])) $updateData['ItemName'] = $data['item_name'];
          if (isset($data['amount'])) {
-            if ($data['amount'] <= 0) Helpers::sendError('Item amount must be positive', 400);
+            if ($data['amount'] <= 0) Helpers::sendFeedback('Item amount must be positive', 400);
             $updateData['Amount'] = $data['amount'];
          }
          if (isset($data['category'])) $updateData['Category'] = $data['category'];
@@ -204,7 +204,7 @@ class Budget
          return ['status' => 'success', 'item_id' => $itemId];
       } catch (Exception $e) {
          Helpers::logError('Budget item update error: ' . $e->getMessage());
-         Helpers::sendError('Budget item update failed: ' . $e->getMessage(), 400);
+         Helpers::sendFeedback('Budget item update failed: ' . $e->getMessage(), 400);
       }
    }
 
@@ -220,9 +220,9 @@ class Budget
       $transactionStarted = false;
       try {
          $budget = $orm->getWhere('churchbudget', ['BudgetID' => $budgetId]);
-         if (empty($budget)) Helpers::sendError('Budget not found', 404);
+         if (empty($budget)) Helpers::sendFeedback('Budget not found', 404);
 
-         if ($budget[0]['BudgetStatus'] === 'Approved') Helpers::sendError('Cannot delete approved budget', 400);
+         if ($budget[0]['BudgetStatus'] === 'Approved') Helpers::sendFeedback('Cannot delete approved budget', 400);
 
          $orm->beginTransaction();
          $transactionStarted = true;
@@ -233,7 +233,7 @@ class Budget
       } catch (Exception $e) {
          if ($transactionStarted && $orm->inTransaction()) $orm->rollBack();
          Helpers::logError('Budget delete error: ' . $e->getMessage());
-         Helpers::sendError('Budget delete failed: ' . $e->getMessage(), 400);
+         Helpers::sendFeedback('Budget delete failed: ' . $e->getMessage(), 400);
       }
    }
 
@@ -248,16 +248,16 @@ class Budget
       $orm = new ORM();
       try {
          $item = $orm->getWhere('budget_items', ['ItemID' => $itemId]);
-         if (empty($item)) Helpers::sendError('Budget item not found', 404);
+         if (empty($item)) Helpers::sendFeedback('Budget item not found', 404);
 
          $budget = $orm->getWhere('churchbudget', ['BudgetID' => $item[0]['BudgetID']]);
-         if ($budget[0]['status'] === 'Approved') Helpers::sendError('Cannot delete items of approved budget', 400);
+         if ($budget[0]['status'] === 'Approved') Helpers::sendFeedback('Cannot delete items of approved budget', 400);
 
          $orm->delete('budget_items', ['ItemID' => $itemId]);
          return ['status' => 'success'];
       } catch (Exception $e) {
          Helpers::logError('Budget item delete error: ' . $e->getMessage());
-         Helpers::sendError('Budget item delete failed: ' . $e->getMessage(), 400);
+         Helpers::sendFeedback('Budget item delete failed: ' . $e->getMessage(), 400);
       }
    }
 
@@ -274,16 +274,16 @@ class Budget
       $transactionStarted = false;
       try {
          $budget = $orm->getWhere('churchbudget', ['BudgetID' => $budgetId]);
-         if (empty($budget)) Helpers::sendError('Budget not found', 404);
+         if (empty($budget)) Helpers::sendFeedback('Budget not found', 404);
 
-         if ($budget[0]['BudgetStatus'] !== 'Draft') Helpers::sendError('Only draft budgets can be submitted for approval', 400);
+         if ($budget[0]['BudgetStatus'] !== 'Draft') Helpers::sendFeedback('Only draft budgets can be submitted for approval', 400);
 
          // Validate approvers
-         if (!is_array($approvers) || empty($approvers)) Helpers::sendError('At least one approver is required', 400);
+         if (!is_array($approvers) || empty($approvers)) Helpers::sendFeedback('At least one approver is required', 400);
 
          foreach ($approvers as $userId) {
             $user = $orm->getWhere('churchmember', ['MbrID' => $userId]);
-            if (empty($user)) Helpers::sendError("Invalid user ID: $userId", 400);
+            if (empty($user)) Helpers::sendFeedback("Invalid user ID: $userId", 400);
          }
 
          $orm->beginTransaction();
@@ -306,7 +306,7 @@ class Budget
       } catch (Exception $e) {
          if ($transactionStarted && $orm->inTransaction()) $orm->rollBack();
          Helpers::logError('Budget submit error: ' . $e->getMessage());
-         Helpers::sendError('Budget submission failed: ' . $e->getMessage(), 400);
+         Helpers::sendFeedback('Budget submission failed: ' . $e->getMessage(), 400);
       }
    }
 
@@ -328,10 +328,10 @@ class Budget
          ]);
 
          $approval = $orm->getWhere('budget_approvals', ['ApprovalID' => $approvalId]);
-         if (empty($approval)) Helpers::sendError('Approval record not found', 404);
+         if (empty($approval)) Helpers::sendFeedback('Approval record not found', 404);
 
          $budget = $orm->getWhere('churchbudget', ['BudgetID' => $approval[0]['BudgetID']]);
-         if ($budget[0]['BudgetStatus'] !== 'Pending') Helpers::sendError('Budget is not pending approval', 400);
+         if ($budget[0]['BudgetStatus'] !== 'Pending') Helpers::sendFeedback('Budget is not pending approval', 400);
 
          $orm->beginTransaction();
          $transactionStarted = true;
@@ -355,7 +355,7 @@ class Budget
       } catch (Exception $e) {
          if ($transactionStarted && $orm->inTransaction()) $orm->rollBack();
          Helpers::logError('Budget approval error: ' . $e->getMessage());
-         Helpers::sendError('Budget approval failed: ' . $e->getMessage(), 400);
+         Helpers::sendFeedback('Budget approval failed: ' . $e->getMessage(), 400);
       }
    }
 
@@ -377,7 +377,7 @@ class Budget
             params: [':id' => $budgetId]
          )[0] ?? null;
 
-         if (!$budget) Helpers::sendError('Budget not found', 404);
+         if (!$budget) Helpers::sendFeedback('Budget not found', 404);
 
          // Fetch budget items
          $items = $orm->selectWithJoin(
@@ -426,7 +426,7 @@ class Budget
          ];
       } catch (Exception $e) {
          Helpers::logError('Budget get error: ' . $e->getMessage());
-         Helpers::sendError('Budget retrieval failed: ' . $e->getMessage(), 400);
+         Helpers::sendFeedback('Budget retrieval failed: ' . $e->getMessage(), 400);
       }
    }
 
@@ -537,7 +537,7 @@ class Budget
          ];
       } catch (Exception $e) {
          Helpers::logError('Budget getAll error: ' . $e->getMessage());
-         Helpers::sendError('Budget retrieval failed: ' . $e->getMessage(), 400);
+         Helpers::sendFeedback('Budget retrieval failed: ' . $e->getMessage(), 400);
       }
    }
 }

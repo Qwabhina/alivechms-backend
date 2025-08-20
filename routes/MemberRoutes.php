@@ -9,7 +9,7 @@
  */
 require_once __DIR__ . '/../core/Member.php';
 
-if (!$token || !Auth::verify($token)) Helpers::sendError('Unauthorized', 401);
+if (!$token || !Auth::verify($token)) Helpers::sendFeedback('Unauthorized', 401);
 
 switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
     case 'GET member/recent':
@@ -73,7 +73,7 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
             $result = Member::register($input);
             echo json_encode($result);
         } catch (Exception $e) {
-            Helpers::sendError($e->getMessage(), 400);
+            Helpers::sendFeedback($e->getMessage(), 400);
         }
         break;
 
@@ -83,13 +83,13 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
         $input = json_decode(file_get_contents('php://input'), true);
         $mbrId = $pathParts[2] ?? null;
 
-        if (!$mbrId)  Helpers::sendError('Member ID required', 400);
+        if (!$mbrId)  Helpers::sendFeedback('Member ID required', 400);
 
         try {
             $result = Member::update($mbrId, $input);
             echo json_encode($result);
         } catch (Exception $e) {
-            Helpers::sendError($e->getMessage(), 400);
+            Helpers::sendFeedback($e->getMessage(), 400);
         }
 
         break;
@@ -98,13 +98,13 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
         Auth::checkPermission($token, 'edit_members');
 
         $mbrId = $pathParts[2] ?? null;
-        if (!$mbrId) Helpers::sendError('Member ID required', 400);
+        if (!$mbrId) Helpers::sendFeedback('Member ID required', 400);
 
         try {
             $result = Member::delete($mbrId);
             echo json_encode($result);
         } catch (Exception $e) {
-            Helpers::sendError($e->getMessage(), 400);
+            Helpers::sendFeedback($e->getMessage(), 400);
         }
         break;
 
@@ -112,17 +112,18 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
         Auth::checkPermission($token, 'view_members');
 
         $mbrId = $pathParts[2] ?? null;
-        if (!$mbrId) Helpers::sendError('Member ID required', 400);
+        if (!$mbrId) Helpers::sendFeedback('Member ID required', 400);
+        if (!is_numeric($mbrId)) Helpers::sendFeedback('Invalid Member ID', 400);
 
         try {
             $member = Member::get($mbrId);
             echo json_encode($member);
         } catch (Exception $e) {
-            Helpers::sendError($e->getMessage(), 404);
+            Helpers::sendFeedback($e->getMessage(), 404);
         }
         break;
 
     default:
-        Helpers::sendError('Endpoint not found', 404);
+        Helpers::sendFeedback('Endpoint not found', 404);
 }
 ?>

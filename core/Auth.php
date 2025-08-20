@@ -81,7 +81,7 @@ class Auth
             ]);
         } catch (Exception $e) {
             Helpers::logError('Failed to store refresh token: ' . $e->getMessage());
-            Helpers::sendError('Failed to store refresh token', 500);
+            Helpers::sendFeedback('Failed to store refresh token', 500);
         }
     }
     /**
@@ -95,7 +95,7 @@ class Auth
         self::initKeys();
         try {
             $decoded = self::verify($refreshToken, self::$refreshSecretKey);
-            if (!$decoded)  Helpers::sendError('Error: Invalid refresh token', 401);
+            if (!$decoded)  Helpers::sendFeedback('Error: Invalid refresh token', 401);
 
             $orm = new ORM();
             $tokenRecords = $orm->getWhere('refresh_tokens', [
@@ -103,12 +103,12 @@ class Auth
                 'revoked' => 0
             ]);
 
-            if (empty($tokenRecords)) Helpers::sendError('Refresh token is invalid or revoked', 401);
+            if (empty($tokenRecords)) Helpers::sendFeedback('Refresh token is invalid or revoked', 401);
 
             $tokenRecord = $tokenRecords[0];
             if (strtotime($tokenRecord['expires_at']) < time()) {
                 $orm->update('refresh_tokens', ['revoked' => 1], ['id' => $tokenRecord['id']]);
-                Helpers::sendError('Refresh token is expired', 400);
+                Helpers::sendFeedback('Refresh token is expired', 400);
             }
 
             $userRecords = $orm->selectWithJoin(
@@ -123,7 +123,7 @@ class Auth
                 params: [':mbr_id' => $decoded['user_id']]
             );
 
-            if (empty($userRecords)) Helpers::sendError('User not found', 404);
+            if (empty($userRecords)) Helpers::sendFeedback('User not found', 404);
 
             $roles = array_column($userRecords, 'RoleName');
             $userData = [
@@ -143,7 +143,7 @@ class Auth
             ];
         } catch (Exception $e) {
             Helpers::logError('Refresh token error: ' . $e->getMessage());
-            Helpers::sendError('Refresh token error', 400);
+            Helpers::sendFeedback('Refresh token error', 400);
         }
     }
     /**
@@ -173,10 +173,10 @@ class Auth
     public static function checkPermission($token, $requiredPermission)
     {
         self::initKeys();
-        self::verify($token) ?: Helpers::sendError('Unauthorized: Invalid token', 401);
+        self::verify($token) ?: Helpers::sendFeedback('Unauthorized: Invalid token', 401);
 
         $decoded = JWT::decode($token, new Key(self::$secretKey, 'HS256'));
-        if (!$decoded) Helpers::sendError('Unauthorized: Token malformed or missing roles', 401);
+        if (!$decoded) Helpers::sendFeedback('Unauthorized: Token malformed or missing roles', 401);
 
         $decoded_array = json_decode(json_encode($decoded), true);
         $userId = $decoded_array['user_id'];
@@ -200,7 +200,7 @@ class Auth
 
         if (!in_array($requiredPermission, $permissions)) {
             Helpers::logError('Forbidden: Insufficient permissions for user ' . $userId);
-            Helpers::sendError('Forbidden: Insufficient permissions', 403);
+            Helpers::sendFeedback('Forbidden: Insufficient permissions', 403);
         }
     }
     /**
@@ -225,9 +225,7 @@ class Auth
             return null;
         }
 
-        if (preg_match('/^Bearer\s+([A-Za-z0-9\-_\.]+)/', $authorization, $matches)) {
-            return trim($matches[1]);
-        }
+        if (preg_match('/^Bearer\s+([A-Za-z0-9\-_\.]+)/', $authorization, $matches)) return trim($matches[1]);
 
         Helpers::logError('Invalid Authorization header format: ' . $authorization);
         return null;
@@ -283,8 +281,7 @@ class Auth
                 params: [':username' => $username, ':status' => 'Active']
             )[0] ?? null;
 
-            if (!$user) Helpers::sendError("Username not found", 404);
-            if (!password_verify($password, $user['PasswordHash'])) Helpers::sendError("Incorrect password");
+            if (!$user || !password_verify($password, $user['PasswordHash'])) Helpers::sendFeedback("Incorrect login details");
 
             $role = $orm->selectWithJoin(
                 baseTable: 'memberrole mr',
@@ -313,7 +310,7 @@ class Auth
             ];
         } catch (Exception $e) {
             Helpers::logError("Login error: " . $e->getMessage());
-            Helpers::sendError("Login failed");
+            Helpers::sendFeedback("Login failed");
         }
     }
     /**
@@ -324,7 +321,7 @@ class Auth
     public static function logout($refreshToken)
     {
         self::revokeRefreshToken($refreshToken);
-        return ['message' => 'Logged out successfully'];
+        Helpers::sendFeedback('Logged out successfully', 200, 'success');
     }
 }
 ?>

@@ -6,11 +6,9 @@
  * It provides endpoints for user login, token refresh, and logout.
  * Requires POST requests for login and refresh, and a valid Bearer token for logout.
  */
-if ($_SERVER["REQUEST_METHOD"] !== 'POST') {
-    http_response_code(405);
-    echo json_encode(['error' => 'Method not allowed']);
-    exit;
-}
+
+
+if ($_SERVER["REQUEST_METHOD"] !== 'POST') Helpers::sendFeedback('Request Malformed', 405);
 
 switch ($path) {
     case 'auth/login':
@@ -23,13 +21,13 @@ switch ($path) {
         $data = json_decode(file_get_contents('php://input'), true);
         $refreshToken = $data['refresh_token'] ?? '';
 
-        if (empty($refreshToken)) Helpers::sendError('Refresh token required', 401);
+        if (empty($refreshToken)) Helpers::sendFeedback('Refresh token required', 401);
 
         try {
             $result = Auth::refreshAccessToken($refreshToken);
             echo json_encode($result);
         } catch (Exception $e) {
-            Helpers::sendError('Refresh token required', 401);
+            Helpers::sendFeedback('Refresh token required', 401);
             Helpers::logError($e->getMessage());
         }
         break;
@@ -54,6 +52,6 @@ switch ($path) {
         break;
 
     default:
-        Helpers::sendError('Endpoint not found', 404);
+        Helpers::sendFeedback('Endpoint not found', 404);
         break;
 }

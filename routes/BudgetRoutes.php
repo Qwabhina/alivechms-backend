@@ -9,7 +9,7 @@
  */
 require_once __DIR__ . '/../core/Budget.php';
 
-if (!$token || !Auth::verify($token))  Helpers::sendError('Unauthorized', 401);
+if (!$token || !Auth::verify($token))  Helpers::sendFeedback('Unauthorized', 401);
 
 switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
    case 'POST budget/create':
@@ -20,7 +20,7 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
          $result = Budget::create($input);
          echo json_encode($result);
       } catch (Exception $e) {
-         Helpers::sendError($e->getMessage(), 400);
+         Helpers::sendFeedback($e->getMessage(), 400);
       }
       break;
 
@@ -28,14 +28,14 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
       Auth::checkPermission($token, 'edit_budget');
 
       $budgetId = $pathParts[2] ?? null;
-      if (!$budgetId) Helpers::sendError('Budget ID required', 400);
+      if (!$budgetId) Helpers::sendFeedback('Budget ID required', 400);
 
       $input = json_decode(file_get_contents('php://input'), true);
       try {
          $result = Budget::update($budgetId, $input);
          echo json_encode($result);
       } catch (Exception $e) {
-         Helpers::sendError($e->getMessage(), 400);
+         Helpers::sendFeedback($e->getMessage(), 400);
       }
       break;
 
@@ -43,13 +43,13 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
       Auth::checkPermission($token, 'delete_budget');
 
       $budgetId = $pathParts[2] ?? null;
-      if (!$budgetId) Helpers::sendError('Budget ID required', 400);
+      if (!$budgetId) Helpers::sendFeedback('Budget ID required', 400);
 
       try {
          $result = Budget::delete($budgetId);
          echo json_encode($result);
       } catch (Exception $e) {
-         Helpers::sendError($e->getMessage(), 400);
+         Helpers::sendFeedback($e->getMessage(), 400);
       }
       break;
 
@@ -57,13 +57,13 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
       Auth::checkPermission($token, 'view_budget');
 
       $budgetId = $pathParts[2] ?? null;
-      if (!$budgetId) Helpers::sendError('Budget ID required', 400);
+      if (!$budgetId) Helpers::sendFeedback('Budget ID required', 400);
 
       try {
          $budget = Budget::get($budgetId);
          echo json_encode($budget);
       } catch (Exception $e) {
-         Helpers::sendError($e->getMessage(), 404);
+         Helpers::sendFeedback($e->getMessage(), 404);
       }
       break;
 
@@ -82,7 +82,7 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
          $result = Budget::getAll($page, $limit, $filters);
          echo json_encode($result);
       } catch (Exception $e) {
-         Helpers::sendError($e->getMessage(), 400);
+         Helpers::sendFeedback($e->getMessage(), 400);
       }
       break;
 
@@ -90,35 +90,35 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
       Auth::checkPermission($token, 'edit_budget');
 
       $budgetId = $pathParts[2] ?? null;
-      if (!$budgetId) Helpers::sendError('Budget ID required', 400);
+      if (!$budgetId) Helpers::sendFeedback('Budget ID required', 400);
 
       $input = json_decode(file_get_contents('php://input'), true);
-      if (!isset($input['approvers']) || !is_array($input['approvers']) || empty($input['approvers'])) Helpers::sendError('Approver(s) required', 400);
+      if (!isset($input['approvers']) || !is_array($input['approvers']) || empty($input['approvers'])) Helpers::sendFeedback('Approver(s) required', 400);
 
       try {
          $result = Budget::submitForApproval($budgetId, $input['approvers']);
          echo json_encode($result);
       } catch (Exception $e) {
-         Helpers::sendError($e->getMessage(), 400);
+         Helpers::sendFeedback($e->getMessage(), 400);
       }
       break;
    case 'POST budget/approve':
       Auth::checkPermission($token, 'approve_budget');
 
       $approvalId = $pathParts[2] ?? null;
-      if (!$approvalId) Helpers::sendError('Approval ID required', 400);
+      if (!$approvalId) Helpers::sendFeedback('Approval ID required', 400);
 
       $input = json_decode(file_get_contents('php://input'), true);
-      if (!isset($input['status']) || !in_array($input['status'], ['Approved', 'Rejected'])) Helpers::sendError('Valid status (Approved or Rejected) required', 400);
+      if (!isset($input['status']) || !in_array($input['status'], ['Approved', 'Rejected'])) Helpers::sendFeedback('Valid status (Approved or Rejected) required', 400);
 
       try {
          $result = Budget::approve($approvalId, $input);
          echo json_encode($result);
       } catch (Exception $e) {
-         Helpers::sendError($e->getMessage(), 400);
+         Helpers::sendFeedback($e->getMessage(), 400);
       }
       break;
    default:
-      Helpers::sendError('Request Malfformed', 405);
+      Helpers::sendFeedback('Request Malfformed', 405);
       break;
 }

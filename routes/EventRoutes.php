@@ -10,7 +10,7 @@
 
 require_once __DIR__ . '/../core/Event.php';
 
-if (!$token || !Auth::verify($token)) Helpers::sendError('Unauthorized', 401);
+if (!$token || !Auth::verify($token)) Helpers::sendFeedback('Unauthorized', 401);
 
 switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
    case 'POST event/create':
@@ -22,7 +22,7 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
          $result = Event::create($input);
          echo json_encode($result);
       } catch (Exception $e) {
-         Helpers::sendError($e->getMessage(), 400);
+         Helpers::sendFeedback($e->getMessage(), 400);
       }
       break;
 
@@ -30,7 +30,7 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
       Auth::checkPermission($token, 'create_event');
       $eventId = $pathParts[2] ?? null;
       if (!$eventId) {
-         Helpers::sendError('Event ID required', 400);
+         Helpers::sendFeedback('Event ID required', 400);
       }
       $input = json_decode(file_get_contents('php://input'), true);
       try {
@@ -39,7 +39,7 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
          $result = Event::update($eventId, $input);
          echo json_encode($result);
       } catch (Exception $e) {
-         Helpers::sendError($e->getMessage(), 400);
+         Helpers::sendFeedback($e->getMessage(), 400);
       }
       break;
 
@@ -47,13 +47,13 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
       Auth::checkPermission($token, 'delete_event');
       $eventId = $pathParts[2] ?? null;
       if (!$eventId) {
-         Helpers::sendError('Event ID required', 400);
+         Helpers::sendFeedback('Event ID required', 400);
       }
       try {
          $result = Event::delete($eventId);
          echo json_encode($result);
       } catch (Exception $e) {
-         Helpers::sendError($e->getMessage(), 400);
+         Helpers::sendFeedback($e->getMessage(), 400);
       }
       break;
 
@@ -61,13 +61,13 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
       // Auth::checkPermission($token, 'view_event');
       $eventId = $pathParts[2] ?? null;
       if (!$eventId) {
-         Helpers::sendError('Event ID required', 400);
+         Helpers::sendFeedback('Event ID required', 400);
       }
       try {
          $event = Event::get($eventId);
          echo json_encode($event);
       } catch (Exception $e) {
-         Helpers::sendError($e->getMessage(), 404);
+         Helpers::sendFeedback($e->getMessage(), 404);
       }
       break;
 
@@ -89,7 +89,7 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
          $result = Event::getAll($page, $limit, $filters);
          echo json_encode($result);
       } catch (Exception $e) {
-         Helpers::sendError($e->getMessage(), 400);
+         Helpers::sendFeedback($e->getMessage(), 400);
       }
       break;
 
@@ -97,14 +97,14 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
       // Auth::checkPermission($token, 'manage_attendance');
       $eventId = $pathParts[2] ?? null;
       if (!$eventId) {
-         Helpers::sendError('Event ID required', 400);
+         Helpers::sendFeedback('Event ID required', 400);
       }
       $input = json_decode(file_get_contents('php://input'), true);
       try {
          $result = Event::recordAttendance($eventId, $input['member_id'], $input['status']);
          echo json_encode($result);
       } catch (Exception $e) {
-         Helpers::sendError($e->getMessage(), 400);
+         Helpers::sendFeedback($e->getMessage(), 400);
       }
       break;
 
@@ -112,14 +112,14 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
       Auth::checkPermission($token, 'manage_volunteers');
       $eventId = $pathParts[2] ?? null;
       if (!$eventId) {
-         Helpers::sendError('Event ID required', 400);
+         Helpers::sendFeedback('Event ID required', 400);
       }
       $input = json_decode(file_get_contents('php://input'), true);
       try {
          $result = Event::assignVolunteer($eventId, $input['member_id'], $input['role']);
          echo json_encode($result);
       } catch (Exception $e) {
-         Helpers::sendError($e->getMessage(), 400);
+         Helpers::sendFeedback($e->getMessage(), 400);
       }
       break;
 
@@ -127,13 +127,13 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
       // Auth::checkPermission($token, 'view_event');
       $eventId = $pathParts[2] ?? null;
       if (!$eventId) {
-         Helpers::sendError('Event ID required', 400);
+         Helpers::sendFeedback('Event ID required', 400);
       }
       try {
          $result = Event::getAttendance($eventId);
          echo json_encode($result);
       } catch (Exception $e) {
-         Helpers::sendError($e->getMessage(), 400);
+         Helpers::sendFeedback($e->getMessage(), 400);
       }
       break;
 
@@ -141,13 +141,13 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
       Auth::checkPermission($token, 'view_event');
       $eventId = $pathParts[2] ?? null;
       if (!$eventId) {
-         Helpers::sendError('Event ID required', 400);
+         Helpers::sendFeedback('Event ID required', 400);
       }
       try {
          $result = Event::getVolunteers($eventId);
          echo json_encode($result);
       } catch (Exception $e) {
-         Helpers::sendError($e->getMessage(), 400);
+         Helpers::sendFeedback($e->getMessage(), 400);
       }
       break;
 
@@ -156,7 +156,7 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
       $type = $pathParts[2] ?? null;
 
       if (!$type) {
-         Helpers::sendError('Report type required', 400);
+         Helpers::sendFeedback('Report type required', 400);
       }
       $filters = [];
       if (isset($_GET['date_from'])) {
@@ -175,7 +175,7 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
          $result = Event::getReports($type, $filters);
          echo json_encode($result);
       } catch (Exception $e) {
-         Helpers::sendError($e->getMessage(), 400);
+         Helpers::sendFeedback($e->getMessage(), 400);
       }
       break;
 
@@ -183,14 +183,14 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
       Auth::checkPermission($token, 'manage_attendance');
       $eventId = $pathParts[2] ?? null;
       if (!$eventId) {
-         Helpers::sendError('Event ID required', 400);
+         Helpers::sendFeedback('Event ID required', 400);
       }
       $input = json_decode(file_get_contents('php://input'), true);
       try {
          $result = Event::bulkAttendance($eventId, $input);
          echo json_encode($result);
       } catch (Exception $e) {
-         Helpers::sendError($e->getMessage(), 400);
+         Helpers::sendFeedback($e->getMessage(), 400);
       }
       break;
 
@@ -198,7 +198,7 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
       Auth::checkPermission($token, 'record_own_attendance');
       $eventId = $pathParts[2] ?? null;
       if (!$eventId) {
-         Helpers::sendError('Event ID required', 400);
+         Helpers::sendFeedback('Event ID required', 400);
       }
       $input = json_decode(file_get_contents('php://input'), true);
       try {
@@ -206,11 +206,11 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
          $result = Event::selfAttendance($eventId, $input['status'], $decoded['user_id']);
          echo json_encode($result);
       } catch (Exception $e) {
-         Helpers::sendError($e->getMessage(), 400);
+         Helpers::sendFeedback($e->getMessage(), 400);
       }
       break;
 
 
    default:
-      Helpers::sendError('Endpoint not found', 404);
+      Helpers::sendFeedback('Endpoint not found', 404);
 }

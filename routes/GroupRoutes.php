@@ -150,8 +150,8 @@ try {
          break;
 
       default:
-         Helpers::sendError('Endpoint not found', 404);
+         Helpers::sendFeedback('Endpoint not found', 404);
    }
 } catch (Exception $e) {
-   Helpers::sendError($e->getMessage(), 400);
+   Helpers::sendFeedback($e->getMessage(), 400);
 }
