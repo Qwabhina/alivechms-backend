@@ -173,12 +173,12 @@ class Event
          $event = $orm->selectWithJoin(
             baseTable: 'churchevent e',
             joins: [
-               ['table' => 'branch b', 'on' => 'e.BranchID = b.BranchID', 'type' => 'LEFT'],
+               // ['table' => 'branch b', 'on' => 'e.BranchID = b.BranchID', 'type' => 'LEFT'],
                ['table' => 'churchmember m', 'on' => 'e.CreatedBy = m.MbrID', 'type' => 'LEFT']
             ],
             fields: [
                'e.*',
-               'b.BranchName',
+               // 'b.BranchName',
                'm.MbrFirstName as CreatorFirstName',
                'm.MbrFamilyName as CreatorFamilyName'
             ],
@@ -226,12 +226,12 @@ class Event
          $events = $orm->selectWithJoin(
             baseTable: 'churchevent e',
             joins: [
-               ['table' => 'branch b', 'on' => 'e.BranchID = b.BranchID', 'type' => 'LEFT'],
+               // ['table' => 'branch b', 'on' => 'e.BranchID = b.BranchID', 'type' => 'LEFT'],
                ['table' => 'churchmember m', 'on' => 'e.CreatedBy = m.MbrID', 'type' => 'LEFT']
             ],
             fields: [
                'e.*',
-               'b.BranchName',
+               // 'b.BranchName',
                'm.MbrFirstName as CreatorFirstName',
                'm.MbrFamilyName as CreatorFamilyName'
             ],
@@ -310,6 +310,71 @@ class Event
 
          Helpers::logError('Event attendance error: ' . $e->getMessage());
          Helpers::sendFeedback('Failed to record attendance');
+      }
+   }
+   /**
+    * Records attendance for a member at a specific event.
+    * Validates input, checks for existing attendance, and inserts into the database.
+    * @param array $data The attendance data to record.
+    * @return array The created attendance ID and status.
+    * @throws Exception If validation fails, member or event not found, or attendance already recorded.
+    */
+   public static function recordAttendances($data)
+   {
+      $orm = new ORM();
+      try {
+         // Validate input
+         Helpers::validateInput($data, [
+            'event_id' => 'required|numeric',
+            'member_id' => 'required|numeric',
+            'attendance_date' => 'required|date'
+         ]);
+
+         // Validate member
+         $member = $orm->getWhere('churchmember', [
+            'MbrID' => $data['member_id'],
+            'MbrMembershipStatus' => 'Active',
+            'Deleted' => 0
+         ]);
+         if (empty($member)) {
+            throw new Exception('Invalid or inactive member');
+         }
+
+         // Validate event
+         $event = $orm->getWhere('event', ['EventID' => $data['event_id']]);
+         if (empty($event)) {
+            throw new Exception('Event not found');
+         }
+
+         // Check if already attended
+         $existing = $orm->getWhere('event_attendance', [
+            'EventID' => $data['event_id'],
+            'MbrID' => $data['member_id'],
+            'AttendanceDate' => $data['attendance_date']
+         ]);
+         if (!empty($existing)) {
+            throw new Exception('Attendance already recorded');
+         }
+
+         $attendanceId = $orm->insert('event_attendance', [
+            'EventID' => $data['event_id'],
+            'MbrID' => $data['member_id'],
+            'AttendanceDate' => $data['attendance_date']
+         ])['id'];
+
+         // Create notification
+         $orm->insert('communication', [
+            'Title' => 'Event Attendance Recorded',
+            'Message' => "Your attendance at '{$event[0]['EventName']}' on {$data['attendance_date']} has been recorded.",
+            'SentBy' => $data['created_by'] ?? 0,
+            'TargetMemberID' => $data['member_id'],
+            'DeliveryStatus' => 'Pending'
+         ]);
+
+         return ['status' => 'success', 'attendance_id' => $attendanceId];
+      } catch (Exception $e) {
+         Helpers::logError('MemberEngagement recordAttendance error: ' . $e->getMessage());
+         throw $e;
       }
    }
    /**
