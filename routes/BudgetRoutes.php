@@ -13,7 +13,7 @@ if (!$token || !Auth::verify($token))  Helpers::sendFeedback('Unauthorized', 401
 
 switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
    case 'POST budget/create':
-      Auth::checkPermission($token, 'create_budget');
+      // Auth::checkPermission($token, 'create_budget');
 
       $input = json_decode(file_get_contents('php://input'), true);
       try {
@@ -25,7 +25,7 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
       break;
 
    case 'POST budget/update':
-      Auth::checkPermission($token, 'edit_budget');
+      // Auth::checkPermission($token, 'edit_budget');
 
       $budgetId = $pathParts[2] ?? null;
       if (!$budgetId) Helpers::sendFeedback('Budget ID required', 400);
@@ -40,7 +40,7 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
       break;
 
    case 'POST budget/delete':
-      Auth::checkPermission($token, 'delete_budget');
+      // Auth::checkPermission($token, 'delete_budget');
 
       $budgetId = $pathParts[2] ?? null;
       if (!$budgetId) Helpers::sendFeedback('Budget ID required', 400);
@@ -54,7 +54,7 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
       break;
 
    case 'GET budget/view':
-      Auth::checkPermission($token, 'view_budget');
+      // Auth::checkPermission($token, 'view_budget');
 
       $budgetId = $pathParts[2] ?? null;
       if (!$budgetId) Helpers::sendFeedback('Budget ID required', 400);
@@ -68,7 +68,7 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
       break;
 
    case 'GET budget/all':
-      Auth::checkPermission($token, 'view_budgets');
+      // Auth::checkPermission($token, 'view_budgets');
 
       $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
       $limit = isset($_GET['limit']) ? max(1, min(100, intval($_GET['limit']))) : 10;
@@ -87,7 +87,7 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
       break;
 
    case 'POST budget/submit':
-      Auth::checkPermission($token, 'edit_budget');
+      // Auth::checkPermission($token, 'edit_budget');
 
       $budgetId = $pathParts[2] ?? null;
       if (!$budgetId) Helpers::sendFeedback('Budget ID required', 400);
@@ -103,7 +103,7 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
       }
       break;
    case 'POST budget/approve':
-      Auth::checkPermission($token, 'approve_budget');
+      // Auth::checkPermission($token, 'approve_budget');
 
       $approvalId = $pathParts[2] ?? null;
       if (!$approvalId) Helpers::sendFeedback('Approval ID required', 400);

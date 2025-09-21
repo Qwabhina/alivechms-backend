@@ -2,10 +2,9 @@
 
 /**
  * Family Management Class
- * Handles creation, updating, deletion, and retrieval of family records   
- * Validates input data and checks for uniqueness of family names
- * Implements error handling and transaction management
- * @package Family
+ * Handles creation, updating, deletion, and retrieval of family records.
+ * Validates input data and checks for uniqueness of family names.
+ * Manages family members, including adding, removing, and updating roles.
  */
 class Family
 {
@@ -13,11 +12,11 @@ class Family
      * Valid family roles
      */
     private static $validRoles = ['Head', 'Spouse', 'Child', 'Other'];
+
     /**
      * Create a new family
      * @param array $data The family data containing 'name', 'head_id', and 'branch_id'
      * @return array The created family ID and status
-     * @throws Exception if validation fails or database errors occur
      */
     public static function create($data)
     {
@@ -26,7 +25,7 @@ class Family
         try {
             // Validate input
             Helpers::validateInput($data, [
-                'name' => 'required',
+                'name' => 'required|string',
                 'head_id' => 'required|numeric',
                 'branch_id' => 'required|numeric'
             ]);
@@ -38,29 +37,34 @@ class Family
                 'Deleted' => 0
             ]);
             if (empty($head)) {
-                throw new Exception('Invalid or inactive head of household ID');
+                Helpers::logError('Family create error: Invalid or inactive head of household ID');
+                Helpers::sendFeedback('Invalid or inactive head of household ID', 400);
             }
 
             // Validate branch
             $branch = $orm->getWhere('branch', ['BranchID' => $data['branch_id']]);
             if (empty($branch)) {
-                throw new Exception('Invalid branch ID');
+                Helpers::logError('Family create error: Invalid branch ID');
+                Helpers::sendFeedback('Invalid branch ID', 400);
             }
 
             // Validate head's branch
             if ($head[0]['BranchID'] != $data['branch_id']) {
-                throw new Exception('Head of household must belong to the specified branch');
+                Helpers::logError('Family create error: Head of household must belong to the specified branch');
+                Helpers::sendFeedback('Head of household must belong to the specified branch', 400);
             }
 
             // Check for duplicate family name
             $existing = $orm->getWhere('family', ['FamilyName' => $data['name']]);
             if (!empty($existing)) {
-                throw new Exception('Family name already exists');
+                Helpers::logError('Family create error: Family name already exists');
+                Helpers::sendFeedback('Family name already exists', 400);
             }
 
             // Check if head is already in a family
             if (!empty($head[0]['FamilyID'])) {
-                throw new Exception('Head of household is already assigned to a family');
+                Helpers::logError('Family create error: Head of household is already assigned to a family');
+                Helpers::sendFeedback('Head of household is already assigned to a family', 400);
             }
 
             $orm->beginTransaction();
@@ -100,15 +104,15 @@ class Family
                 $orm->rollBack();
             }
             Helpers::logError('Family create error: ' . $e->getMessage());
-            throw $e;
+            Helpers::sendFeedback('Family creation failed: ' . $e->getMessage(), 400);
         }
     }
+
     /**
      * Update an existing family
      * @param int $familyId The ID of the family to update
      * @param array $data The new family data containing 'name', 'head_id', and 'branch_id'
      * @return array The updated family ID and status
-     * @throws Exception if validation fails or database errors occur
      */
     public static function update($familyId, $data)
     {
@@ -117,61 +121,82 @@ class Family
         try {
             // Validate input
             Helpers::validateInput($data, [
-                'name' => 'required',
-                'head_id' => 'required|numeric',
-                'branch_id' => 'required|numeric'
+                'name' => 'string|nullable',
+                'head_id' => 'numeric|nullable',
+                'branch_id' => 'numeric|nullable'
             ]);
 
             // Validate family exists
             $family = $orm->getWhere('family', ['FamilyID' => $familyId]);
             if (empty($family)) {
-                throw new Exception('Family not found');
+                Helpers::logError('Family update error: Family not found');
+                Helpers::sendFeedback('Family not found', 404);
             }
 
-            // Validate head of household
-            $head = $orm->getWhere('churchmember', [
-                'MbrID' => $data['head_id'],
-                'MbrMembershipStatus' => 'Active',
-                'Deleted' => 0
-            ]);
-            if (empty($head)) {
-                throw new Exception('Invalid or inactive head of household ID');
+            // Prepare update data
+            $updateData = [];
+            $headId = $data['head_id'] ?? $family[0]['HeadOfHouseholdID'];
+            $branchId = $data['branch_id'] ?? $family[0]['BranchID'];
+
+            // Validate head of household if provided
+            if (isset($data['head_id'])) {
+                $head = $orm->getWhere('churchmember', [
+                    'MbrID' => $data['head_id'],
+                    'MbrMembershipStatus' => 'Active',
+                    'Deleted' => 0
+                ]);
+                if (empty($head)) {
+                    Helpers::logError('Family update error: Invalid or inactive head of household ID');
+                    Helpers::sendFeedback('Invalid or inactive head of household ID', 400);
+                }
+
+                // Validate head's branch
+                if ($head[0]['BranchID'] != $branchId) {
+                    Helpers::logError('Family update error: Head of household must belong to the specified branch');
+                    Helpers::sendFeedback('Head of household must belong to the specified branch', 400);
+                }
+
+                // Check if new head is in another family
+                if ($data['head_id'] != $family[0]['HeadOfHouseholdID'] && !empty($head[0]['FamilyID']) && $head[0]['FamilyID'] != $familyId) {
+                    Helpers::logError('Family update error: New head of household is already assigned to another family');
+                    Helpers::sendFeedback('New head of household is already assigned to another family', 400);
+                }
             }
 
-            // Validate branch
-            $branch = $orm->getWhere('branch', ['BranchID' => $data['branch_id']]);
-            if (empty($branch)) {
-                throw new Exception('Invalid branch ID');
+            // Validate branch if provided
+            if (isset($data['branch_id'])) {
+                $branch = $orm->getWhere('branch', ['BranchID' => $data['branch_id']]);
+                if (empty($branch)) {
+                    Helpers::logError('Family update error: Invalid branch ID');
+                    Helpers::sendFeedback('Invalid branch ID', 400);
+                }
             }
 
-            // Validate head's branch
-            if ($head[0]['BranchID'] != $data['branch_id']) {
-                throw new Exception('Head of household must belong to the specified branch');
+            // Check for duplicate family name if provided
+            if (isset($data['name'])) {
+                $existing = $orm->getWhere('family', ['FamilyName' => $data['name'], 'FamilyID != ' => $familyId]);
+                if (!empty($existing)) {
+                    Helpers::logError('Family update error: Family name already exists');
+                    Helpers::sendFeedback('Family name already exists', 400);
+                }
+                $updateData['FamilyName'] = $data['name'];
             }
 
-            // Check for duplicate family name (excluding current)
-            $existing = $orm->getWhere('family', ['FamilyName' => $data['name'], 'FamilyID != ' => $familyId]);
-            if (!empty($existing)) {
-                throw new Exception('Family name already exists');
-            }
+            if (isset($data['head_id'])) $updateData['HeadOfHouseholdID'] = $data['head_id'];
+            if (isset($data['branch_id'])) $updateData['BranchID'] = $data['branch_id'];
 
-            // Check if new head is in another family
-            if ($data['head_id'] != $family[0]['HeadOfHouseholdID'] && !empty($head[0]['FamilyID']) && $head[0]['FamilyID'] != $familyId) {
-                throw new Exception('New head of household is already assigned to another family');
+            if (empty($updateData)) {
+                return ['status' => 'success', 'family_id' => $familyId];
             }
 
             $orm->beginTransaction();
             $transactionStarted = true;
 
             // Update family
-            $orm->update('family', [
-                'FamilyName' => $data['name'],
-                'HeadOfHouseholdID' => $data['head_id'],
-                'BranchID' => $data['branch_id']
-            ], ['FamilyID' => $familyId]);
+            $orm->update('family', $updateData, ['FamilyID' => $familyId]);
 
             // Update family_member roles if head changed
-            if ($data['head_id'] != $family[0]['HeadOfHouseholdID']) {
+            if (isset($data['head_id']) && $data['head_id'] != $family[0]['HeadOfHouseholdID']) {
                 // Remove old head's role or set to 'Other'
                 $orm->update('family_member', [
                     'FamilyRole' => 'Other'
@@ -200,8 +225,8 @@ class Family
             // Create notification
             $orm->insert('communication', [
                 'Title' => 'Family Updated',
-                'Message' => "Family '{$data['name']}' has been updated.",
-                'SentBy' => $data['created_by'] ?? $data['head_id'],
+                'Message' => "Family '{$family[0]['FamilyName']}' has been updated.",
+                'SentBy' => $data['created_by'] ?? $headId,
                 'TargetGroupID' => null
             ]);
 
@@ -212,14 +237,14 @@ class Family
                 $orm->rollBack();
             }
             Helpers::logError('Family update error: ' . $e->getMessage());
-            throw $e;
+            Helpers::sendFeedback('Family update failed: ' . $e->getMessage(), 400);
         }
     }
+
     /**
      * Delete a family
      * @param int $familyId The ID of the family to delete
      * @return array The status of the deletion
-     * @throws Exception if validation fails or database errors occur
      */
     public static function delete($familyId)
     {
@@ -229,13 +254,15 @@ class Family
             // Validate family exists
             $family = $orm->getWhere('family', ['FamilyID' => $familyId]);
             if (empty($family)) {
-                throw new Exception('Family not found');
+                Helpers::logError('Family delete error: Family not found');
+                Helpers::sendFeedback('Family not found', 404);
             }
 
             // Check for members
             $members = $orm->getWhere('family_member', ['FamilyID' => $familyId]);
             if (count($members) > 1) { // Allow deletion if only head exists
-                throw new Exception('Cannot delete family with members');
+                Helpers::logError('Family delete error: Cannot delete family with members');
+                Helpers::sendFeedback('Cannot delete family with members', 400);
             }
 
             $orm->beginTransaction();
@@ -259,14 +286,14 @@ class Family
                 $orm->rollBack();
             }
             Helpers::logError('Family delete error: ' . $e->getMessage());
-            throw $e;
+            Helpers::sendFeedback('Family delete failed: ' . $e->getMessage(), 400);
         }
     }
+
     /**
      * Get a family by ID
      * @param int $familyId The ID of the family to retrieve
      * @return array The family data including members
-     * @throws Exception if the family does not exist or database errors occur
      */
     public static function get($familyId)
     {
@@ -289,7 +316,8 @@ class Family
             )[0] ?? null;
 
             if (!$family) {
-                throw new Exception('Family not found');
+                Helpers::logError('Family get error: Family not found');
+                Helpers::sendFeedback('Family not found', 404);
             }
 
             // Get members
@@ -314,16 +342,16 @@ class Family
             return $family;
         } catch (Exception $e) {
             Helpers::logError('Family get error: ' . $e->getMessage());
-            throw $e;
+            Helpers::sendFeedback('Family retrieval failed: ' . $e->getMessage(), 400);
         }
     }
+
     /**
      * Get all families with pagination and optional filters
      * @param int $page The page number for pagination
      * @param int $limit The number of records per page
-     * @param array $filters Optional filters for branch ID and family name
+     * @param array $filters Optional filters for branch_id and name
      * @return array List of families with pagination info
-     * @throws Exception if database errors occur
      */
     public static function getAll($page = 1, $limit = 10, $filters = [])
     {
@@ -361,9 +389,17 @@ class Family
                 offset: $offset
             );
 
+            $whereClause = '';
+            if (!empty($conditions)) {
+                $whereConditions = [];
+                foreach ($conditions as $column => $placeholder) {
+                    $whereConditions[] = "$column $placeholder";
+                }
+                $whereClause = ' WHERE ' . implode(' AND ', $whereConditions);
+            }
+
             $total = $orm->runQuery(
-                "SELECT COUNT(*) as total FROM family f" .
-                    (!empty($conditions) ? ' WHERE ' . implode(' AND ', array_keys($conditions)) : ''),
+                "SELECT COUNT(*) as total FROM family f" . $whereClause,
                 $params
             )[0]['total'];
 
@@ -378,15 +414,15 @@ class Family
             ];
         } catch (Exception $e) {
             Helpers::logError('Family getAll error: ' . $e->getMessage());
-            throw $e;
+            Helpers::sendFeedback('Family retrieval failed: ' . $e->getMessage(), 400);
         }
     }
+
     /**
      * Add a member to a family
      * @param int $familyId The ID of the family to add the member to
      * @param array $data The member data containing 'member_id' and 'role'
      * @return array The status of the addition and family ID
-     * @throws Exception if validation fails or database errors occur
      */
     public static function addMember($familyId, $data)
     {
@@ -396,18 +432,20 @@ class Family
             // Validate input
             Helpers::validateInput($data, [
                 'member_id' => 'required|numeric',
-                'role' => 'required'
+                'role' => 'required|string'
             ]);
 
             // Validate role
             if (!in_array($data['role'], self::$validRoles)) {
-                throw new Exception('Invalid family role');
+                Helpers::logError('Family addMember error: Invalid family role');
+                Helpers::sendFeedback('Invalid family role', 400);
             }
 
             // Validate family exists
             $family = $orm->getWhere('family', ['FamilyID' => $familyId]);
             if (empty($family)) {
-                throw new Exception('Family not found');
+                Helpers::logError('Family addMember error: Family not found');
+                Helpers::sendFeedback('Family not found', 404);
             }
 
             // Validate member
@@ -417,23 +455,27 @@ class Family
                 'Deleted' => 0
             ]);
             if (empty($member)) {
-                throw new Exception('Invalid or inactive member ID');
+                Helpers::logError('Family addMember error: Invalid or inactive member ID');
+                Helpers::sendFeedback('Invalid or inactive member ID', 400);
             }
 
             // Check if member is already in a family
             if (!empty($member[0]['FamilyID']) && $member[0]['FamilyID'] != $familyId) {
-                throw new Exception('Member is already assigned to another family');
+                Helpers::logError('Family addMember error: Member is already assigned to another family');
+                Helpers::sendFeedback('Member is already assigned to another family', 400);
             }
 
             // Check if member is already in family_member
             $existing = $orm->getWhere('family_member', ['FamilyID' => $familyId, 'MbrID' => $data['member_id']]);
             if (!empty($existing)) {
-                throw new Exception('Member is already in the family');
+                Helpers::logError('Family addMember error: Member is already in the family');
+                Helpers::sendFeedback('Member is already in the family', 400);
             }
 
             // Prevent setting another 'Head'
             if ($data['role'] === 'Head') {
-                throw new Exception('Family already has a head of household');
+                Helpers::logError('Family addMember error: Family already has a head of household');
+                Helpers::sendFeedback('Family already has a head of household', 400);
             }
 
             $orm->beginTransaction();
@@ -466,15 +508,15 @@ class Family
                 $orm->rollBack();
             }
             Helpers::logError('Family addMember error: ' . $e->getMessage());
-            throw $e;
+            Helpers::sendFeedback('Family add member failed: ' . $e->getMessage(), 400);
         }
     }
+
     /**
      * Remove a member from a family
      * @param int $familyId The ID of the family to remove the member from
      * @param int $memberId The ID of the member to remove
      * @return array The status of the removal and family ID
-     * @throws Exception if validation fails or database errors occur
      */
     public static function removeMember($familyId, $memberId)
     {
@@ -484,24 +526,28 @@ class Family
             // Validate family exists
             $family = $orm->getWhere('family', ['FamilyID' => $familyId]);
             if (empty($family)) {
-                throw new Exception('Family not found');
+                Helpers::logError('Family removeMember error: Family not found');
+                Helpers::sendFeedback('Family not found', 404);
             }
 
             // Validate member exists
             $member = $orm->getWhere('churchmember', ['MbrID' => $memberId, 'Deleted' => 0]);
             if (empty($member)) {
-                throw new Exception('Invalid member ID');
+                Helpers::logError('Family removeMember error: Invalid member ID');
+                Helpers::sendFeedback('Invalid member ID', 400);
             }
 
             // Check if member is in family
             $existing = $orm->getWhere('family_member', ['FamilyID' => $familyId, 'MbrID' => $memberId]);
             if (empty($existing)) {
-                throw new Exception('Member is not in the family');
+                Helpers::logError('Family removeMember error: Member is not in the family');
+                Helpers::sendFeedback('Member is not in the family', 400);
             }
 
             // Prevent removing head
             if ($memberId == $family[0]['HeadOfHouseholdID']) {
-                throw new Exception('Cannot remove head of household');
+                Helpers::logError('Family removeMember error: Cannot remove head of household');
+                Helpers::sendFeedback('Cannot remove head of household', 400);
             }
 
             $orm->beginTransaction();
@@ -530,16 +576,16 @@ class Family
                 $orm->rollBack();
             }
             Helpers::logError('Family removeMember error: ' . $e->getMessage());
-            throw $e;
+            Helpers::sendFeedback('Family remove member failed: ' . $e->getMessage(), 400);
         }
     }
+
     /**
      * Update a member's role in a family
      * @param int $familyId The ID of the family
      * @param int $memberId The ID of the member
      * @param array $data The data containing 'role' and optionally 'created_by'
      * @return array The status of the update and family/member IDs
-     * @throws Exception if validation fails or database errors occur
      */
     public static function updateMemberRole($familyId, $memberId, $data)
     {
@@ -547,34 +593,41 @@ class Family
         $transactionStarted = false;
         try {
             // Validate input
-            Helpers::validateInput($data, ['role' => 'required']);
+            Helpers::validateInput($data, [
+                'role' => 'required|string'
+            ]);
 
             // Validate role
             if (!in_array($data['role'], self::$validRoles)) {
-                throw new Exception('Invalid family role');
+                Helpers::logError('Family updateMemberRole error: Invalid family role');
+                Helpers::sendFeedback('Invalid family role', 400);
             }
 
             // Validate family exists
             $family = $orm->getWhere('family', ['FamilyID' => $familyId]);
             if (empty($family)) {
-                throw new Exception('Family not found');
+                Helpers::logError('Family updateMemberRole error: Family not found');
+                Helpers::sendFeedback('Family not found', 404);
             }
 
             // Validate member exists
             $member = $orm->getWhere('churchmember', ['MbrID' => $memberId, 'Deleted' => 0]);
             if (empty($member)) {
-                throw new Exception('Invalid member ID');
+                Helpers::logError('Family updateMemberRole error: Invalid member ID');
+                Helpers::sendFeedback('Invalid member ID', 400);
             }
 
             // Check if member is in family
             $existing = $orm->getWhere('family_member', ['FamilyID' => $familyId, 'MbrID' => $memberId]);
             if (empty($existing)) {
-                throw new Exception('Member is not in the family');
+                Helpers::logError('Family updateMemberRole error: Member is not in the family');
+                Helpers::sendFeedback('Member is not in the family', 400);
             }
 
             // Prevent setting another 'Head'
             if ($data['role'] === 'Head' && $memberId != $family[0]['HeadOfHouseholdID']) {
-                throw new Exception('Family already has a head of household');
+                Helpers::logError('Family updateMemberRole error: Family already has a head of household');
+                Helpers::sendFeedback('Family already has a head of household', 400);
             }
 
             $orm->beginTransaction();
@@ -600,8 +653,7 @@ class Family
                 $orm->rollBack();
             }
             Helpers::logError('Family updateMemberRole error: ' . $e->getMessage());
-            throw $e;
+            Helpers::sendFeedback('Family role update failed: ' . $e->getMessage(), 400);
         }
     }
 }
-?>

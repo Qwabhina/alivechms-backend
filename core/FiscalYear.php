@@ -1,52 +1,53 @@
 <?php
 
 /** Fiscal Year Management Class
- * Handles fiscal year management including creation, updating, deletion, and retrieval.
- * Provides methods to manage fiscal years with validation and error handling.
- * @package FiscalYear
- * @version 1.0
+ * This class provides methods for managing fiscal years, including creating, updating, deleting, and viewing fiscal years.
+ * It also handles fiscal year closure.
+ * It requires authentication and permission checks for each operation.
  */
 class FiscalYear
 {
    /**
-    * Create a new fiscal year
-    * @param array $data Fiscal year data including start date, end date, branch ID, and status
-    * @return array Result of the creation operation
-    * @throws Exception If validation fails or fiscal year overlaps with existing ones
+    * Create a new fiscal year entry
+    * @param array $data Fiscal year data including start_date, end_date, branch_id, and optional status
+    * @return array Result of the operation
     */
    public static function create($data)
    {
       $orm = new ORM();
       $transactionStarted = false;
+
       try {
-         // Validate input
          Helpers::validateInput($data, [
             'start_date' => 'required|date',
             'end_date' => 'required|date',
-            'branch_id' => 'required|numeric'
+            'branch_id' => 'required|numeric',
+            'status' => 'string|in:Active,Closed|nullable'
          ]);
 
          // Validate dates
          if (strtotime($data['start_date']) >= strtotime($data['end_date'])) {
-            throw new Exception('Start date must be before end date');
+            Helpers::logError('Fiscal year create error: Start date must be before end date');
+            Helpers::sendFeedback('Start date must be before end date', 400);
          }
 
          // Validate branch exists
          $branch = $orm->getWhere('branch', ['BranchID' => $data['branch_id']]);
          if (empty($branch)) {
-            throw new Exception('Invalid branch ID');
+            Helpers::logError('Fiscal year create error: Invalid branch ID');
+            Helpers::sendFeedback('Invalid branch ID', 400);
          }
 
          // Check for overlapping fiscal years
          $overlap = $orm->runQuery(
             "SELECT FiscalYearID FROM fiscalyear 
-                 WHERE BranchID = :branch_id 
-                 AND Status = 'Active'
-                 AND (
-                     (:start_date BETWEEN FiscalYearStartDate AND FiscalYearEndDate)
-                     OR (:end_date BETWEEN FiscalYearStartDate AND FiscalYearEndDate)
-                     OR (FiscalYearStartDate BETWEEN :start_date AND :end_date)
-                 )",
+             WHERE BranchID = :branch_id 
+             AND Status = 'Active'
+             AND (
+                 (:start_date BETWEEN FiscalYearStartDate AND FiscalYearEndDate)
+                 OR (:end_date BETWEEN FiscalYearStartDate AND FiscalYearEndDate)
+                 OR (FiscalYearStartDate BETWEEN :start_date AND :end_date)
+             )",
             [
                ':branch_id' => $data['branch_id'],
                ':start_date' => $data['start_date'],
@@ -54,7 +55,8 @@ class FiscalYear
             ]
          );
          if (!empty($overlap)) {
-            throw new Exception('Fiscal year overlaps with an existing active fiscal year');
+            Helpers::logError('Fiscal year create error: Fiscal year overlaps with an existing active fiscal year');
+            Helpers::sendFeedback('Fiscal year overlaps with an existing active fiscal year', 400);
          }
 
          $orm->beginTransaction();
@@ -78,88 +80,111 @@ class FiscalYear
          $orm->commit();
          return ['status' => 'success', 'fiscal_year_id' => $fiscalYearId];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->inTransaction()) {
-            $orm->rollBack();
-         }
+         if ($transactionStarted && $orm->inTransaction()) $orm->rollBack();
+
          Helpers::logError('Fiscal year create error: ' . $e->getMessage());
-         throw $e;
+         Helpers::sendFeedback('Fiscal year creation failed: ' . $e->getMessage(), 400);
       }
    }
+
    /**
-    * Update an existing fiscal year
+    * Update an existing fiscal year entry
     * @param int $fiscalYearId ID of the fiscal year to update
-    * @param array $data Updated fiscal year data including start date, end date, branch ID, and status
-    * @return array Result of the update operation
-    * @throws Exception If validation fails, fiscal year not found, or overlaps with existing ones
+    * @param array $data Updated fiscal year data
+    * @return array Result of the operation
     */
    public static function update($fiscalYearId, $data)
    {
       $orm = new ORM();
       $transactionStarted = false;
       try {
-         // Validate input
          Helpers::validateInput($data, [
-            'start_date' => 'required|date',
-            'end_date' => 'required|date',
-            'branch_id' => 'required|numeric'
+            'start_date' => 'date|nullable',
+            'end_date' => 'date|nullable',
+            'branch_id' => 'numeric|nullable',
+            'status' => 'string|in:Active,Closed|nullable'
          ]);
-
-         // Validate dates
-         if (strtotime($data['start_date']) >= strtotime($data['end_date'])) {
-            throw new Exception('Start date must be before end date');
-         }
-
-         // Validate branch exists
-         $branch = $orm->getWhere('branch', ['BranchID' => $data['branch_id']]);
-         if (empty($branch)) {
-            throw new Exception('Invalid branch ID');
-         }
 
          // Validate fiscal year exists
          $fiscalYear = $orm->getWhere('fiscalyear', ['FiscalYearID' => $fiscalYearId]);
          if (empty($fiscalYear)) {
-            throw new Exception('Fiscal year not found');
+            Helpers::logError('Fiscal year update error: Fiscal year not found');
+            Helpers::sendFeedback('Fiscal year not found', 404);
+         }
+
+         // Prevent updating closed fiscal years if necessary
+         if ($fiscalYear[0]['Status'] === 'Closed' && (isset($data['start_date']) || isset($data['end_date']))) {
+            Helpers::logError('Fiscal year update error: Cannot update dates of a closed fiscal year');
+            Helpers::sendFeedback('Cannot update dates of a closed fiscal year', 400);
+         }
+
+         $updateData = [];
+         $branchId = $data['branch_id'] ?? $fiscalYear[0]['BranchID'];
+         $startDate = $data['start_date'] ?? $fiscalYear[0]['FiscalYearStartDate'];
+         $endDate = $data['end_date'] ?? $fiscalYear[0]['FiscalYearEndDate'];
+
+         // Validate dates if provided
+         if (isset($data['start_date']) || isset($data['end_date'])) {
+            if (strtotime($startDate) >= strtotime($endDate)) {
+               Helpers::logError('Fiscal year update error: Start date must be before end date');
+               Helpers::sendFeedback('Start date must be before end date', 400);
+            }
+         }
+
+         // Validate branch if provided
+         if (isset($data['branch_id'])) {
+            $branch = $orm->getWhere('branch', ['BranchID' => $data['branch_id']]);
+            if (empty($branch)) {
+               Helpers::logError('Fiscal year update error: Invalid branch ID');
+               Helpers::sendFeedback('Invalid branch ID', 400);
+            }
          }
 
          // Check for overlapping fiscal years (excluding current)
          $overlap = $orm->runQuery(
             "SELECT FiscalYearID FROM fiscalyear 
-                 WHERE BranchID = :branch_id 
-                 AND Status = 'Active'
-                 AND FiscalYearID != :id
-                 AND (
-                     (:start_date BETWEEN FiscalYearStartDate AND FiscalYearEndDate)
-                     OR (:end_date BETWEEN FiscalYearStartDate AND FiscalYearEndDate)
-                     OR (FiscalYearStartDate BETWEEN :start_date AND :end_date)
-                 )",
+             WHERE BranchID = :branch_id 
+             AND Status = 'Active'
+             AND FiscalYearID != :id
+             AND (
+                 (:start_date BETWEEN FiscalYearStartDate AND FiscalYearEndDate)
+                 OR (:end_date BETWEEN FiscalYearStartDate AND FiscalYearEndDate)
+                 OR (FiscalYearStartDate BETWEEN :start_date AND :end_date)
+             )",
             [
-               ':branch_id' => $data['branch_id'],
+               ':branch_id' => $branchId,
                ':id' => $fiscalYearId,
-               ':start_date' => $data['start_date'],
-               ':end_date' => $data['end_date']
+               ':start_date' => $startDate,
+               ':end_date' => $endDate
             ]
          );
          if (!empty($overlap)) {
-            throw new Exception('Fiscal year overlaps with an existing active fiscal year');
+            Helpers::logError('Fiscal year update error: Fiscal year overlaps with an existing active fiscal year');
+            Helpers::sendFeedback('Fiscal year overlaps with an existing active fiscal year', 400);
          }
 
          $orm->beginTransaction();
          $transactionStarted = true;
 
-         $orm->update('fiscalyear', [
-            'FiscalYearStartDate' => $data['start_date'],
-            'FiscalYearEndDate' => $data['end_date'],
-            'BranchID' => $data['branch_id'],
-            'Status' => $data['status'] ?? $fiscalYear[0]['Status']
-         ], ['FiscalYearID' => $fiscalYearId]);
+         if (isset($data['start_date'])) $updateData['FiscalYearStartDate'] = $data['start_date'];
+         if (isset($data['end_date'])) $updateData['FiscalYearEndDate'] = $data['end_date'];
+         if (isset($data['branch_id'])) $updateData['BranchID'] = $data['branch_id'];
+         if (isset($data['status'])) $updateData['Status'] = $data['status'];
 
-         // Create notification
-         $orm->insert('communication', [
-            'Title' => 'Fiscal Year Updated',
-            'Message' => "Fiscal year {$data['start_date']} to {$data['end_date']} updated for branch {$branch[0]['BranchName']}.",
-            'SentBy' => $data['created_by'] ?? 1,
-            'TargetGroupID' => null
-         ]);
+         if (!empty($updateData)) {
+            $orm->update('fiscalyear', $updateData, ['FiscalYearID' => $fiscalYearId]);
+         }
+
+         // Create notification if changes were made
+         if (!empty($updateData)) {
+            $branch = $orm->getWhere('branch', ['BranchID' => $branchId]);
+            $orm->insert('communication', [
+               'Title' => 'Fiscal Year Updated',
+               'Message' => "Fiscal year {$startDate} to {$endDate} updated for branch {$branch[0]['BranchName']}.",
+               'SentBy' => $data['updated_by'] ?? 1,
+               'TargetGroupID' => null
+            ]);
+         }
 
          $orm->commit();
          return ['status' => 'success', 'fiscal_year_id' => $fiscalYearId];
@@ -168,35 +193,36 @@ class FiscalYear
             $orm->rollBack();
          }
          Helpers::logError('Fiscal year update error: ' . $e->getMessage());
-         throw $e;
+         Helpers::sendFeedback('Fiscal year update failed: ' . $e->getMessage(), 400);
       }
    }
+
    /**
-    * Delete a fiscal year
+    * Delete a fiscal year entry
     * @param int $fiscalYearId ID of the fiscal year to delete
-    * @return array Result of the deletion operation
-    * @throws Exception If fiscal year not found or has associated budgets, contributions, or expenses
+    * @return array Result of the operation
     */
    public static function delete($fiscalYearId)
    {
       $orm = new ORM();
       $transactionStarted = false;
       try {
-         // Validate fiscal year exists
          $fiscalYear = $orm->getWhere('fiscalyear', ['FiscalYearID' => $fiscalYearId]);
          if (empty($fiscalYear)) {
-            throw new Exception('Fiscal year not found');
+            Helpers::logError('Fiscal year delete error: Fiscal year not found');
+            Helpers::sendFeedback('Fiscal year not found', 404);
          }
 
          // Check if referenced
          $referenced = $orm->runQuery(
             "SELECT (SELECT COUNT(*) FROM budget WHERE FiscalYearID = :id) +
-                        (SELECT COUNT(*) FROM contribution WHERE FiscalYearID = :id) +
-                        (SELECT COUNT(*) FROM expense WHERE FiscalYearID = :id) as ref_count",
+                    (SELECT COUNT(*) FROM contribution WHERE FiscalYearID = :id) +
+                    (SELECT COUNT(*) FROM expense WHERE FiscalYearID = :id) as ref_count",
             [':id' => $fiscalYearId]
          )[0]['ref_count'];
          if ($referenced > 0) {
-            throw new Exception('Cannot delete fiscal year with associated budgets, contributions, or expenses');
+            Helpers::logError('Fiscal year delete error: Cannot delete fiscal year with associated budgets, contributions, or expenses');
+            Helpers::sendFeedback('Cannot delete fiscal year with associated budgets, contributions, or expenses', 400);
          }
 
          $orm->beginTransaction();
@@ -207,18 +233,17 @@ class FiscalYear
          $orm->commit();
          return ['status' => 'success'];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->inTransaction()) {
-            $orm->rollBack();
-         }
+         if ($transactionStarted && $orm->inTransaction()) $orm->rollBack();
+
          Helpers::logError('Fiscal year delete error: ' . $e->getMessage());
-         throw $e;
+         Helpers::sendFeedback('Fiscal year delete failed: ' . $e->getMessage(), 400);
       }
    }
+
    /**
-    * Get a fiscal year by ID
+    * Get a specific fiscal year entry by ID
     * @param int $fiscalYearId ID of the fiscal year to retrieve
-    * @return array Fiscal year data
-    * @throws Exception If fiscal year not found
+    * @return array Fiscal year details
     */
    public static function get($fiscalYearId)
    {
@@ -238,21 +263,22 @@ class FiscalYear
          )[0] ?? null;
 
          if (!$fiscalYear) {
-            throw new Exception('Fiscal year not found');
+            Helpers::logError('Fiscal year get error: Fiscal year not found');
+            Helpers::sendFeedback('Fiscal year not found', 404);
          }
          return $fiscalYear;
       } catch (Exception $e) {
          Helpers::logError('Fiscal year get error: ' . $e->getMessage());
-         throw $e;
+         Helpers::sendFeedback('Fiscal year retrieval failed: ' . $e->getMessage(), 400);
       }
    }
+
    /**
-    * Get all fiscal years with pagination and filters
+    * Get all fiscal years with pagination and optional filters
     * @param int $page Page number for pagination
     * @param int $limit Number of records per page
-    * @param array $filters Filters to apply (branch_id, status, date_from, date_to)
+    * @param array $filters Optional filters for branch_id, status, date_from, date_to
     * @return array List of fiscal years with pagination info
-    * @throws Exception If filters are invalid or date formats are incorrect
     */
    public static function getAll($page = 1, $limit = 10, $filters = [])
    {
@@ -268,21 +294,24 @@ class FiscalYear
          }
          if (!empty($filters['status'])) {
             if (!in_array($filters['status'], ['Active', 'Closed'])) {
-               throw new Exception('Invalid status filter');
+               Helpers::logError('Fiscal year getAll error: Invalid status filter');
+               Helpers::sendFeedback('Invalid status filter', 400);
             }
             $conditions['fy.Status ='] = ':status';
             $params[':status'] = $filters['status'];
          }
          if (!empty($filters['date_from'])) {
             if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['date_from'])) {
-               throw new Exception('Invalid date_from format. Use YYYY-MM-DD');
+               Helpers::logError('Fiscal year getAll error: Invalid date_from format. Use YYYY-MM-DD');
+               Helpers::sendFeedback('Invalid date_from format. Use YYYY-MM-DD', 400);
             }
             $conditions['fy.FiscalYearEndDate >='] = ':date_from';
             $params[':date_from'] = $filters['date_from'];
          }
          if (!empty($filters['date_to'])) {
             if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['date_to'])) {
-               throw new Exception('Invalid date_to format. Use YYYY-MM-DD');
+               Helpers::logError('Fiscal year getAll error: Invalid date_to format. Use YYYY-MM-DD');
+               Helpers::sendFeedback('Invalid date_to format. Use YYYY-MM-DD', 400);
             }
             $conditions['fy.FiscalYearStartDate <='] = ':date_to';
             $params[':date_to'] = $filters['date_to'];
@@ -303,9 +332,17 @@ class FiscalYear
             offset: $offset
          );
 
+         $whereClause = '';
+         if (!empty($conditions)) {
+            $whereConditions = [];
+            foreach ($conditions as $column => $placeholder) {
+               $whereConditions[] = "$column $placeholder";
+            }
+            $whereClause = ' WHERE ' . implode(' AND ', $whereConditions);
+         }
+
          $total = $orm->runQuery(
-            "SELECT COUNT(*) as total FROM fiscalyear fy" .
-               (!empty($conditions) ? ' WHERE ' . implode(' AND ', array_keys($conditions)) : ''),
+            "SELECT COUNT(*) as total FROM fiscalyear fy" . $whereClause,
             $params
          )[0]['total'];
 
@@ -320,14 +357,14 @@ class FiscalYear
          ];
       } catch (Exception $e) {
          Helpers::logError('Fiscal year getAll error: ' . $e->getMessage());
-         throw $e;
+         Helpers::sendFeedback('Fiscal year retrieval failed: ' . $e->getMessage(), 400);
       }
    }
+
    /**
     * Close a fiscal year
     * @param int $fiscalYearId ID of the fiscal year to close
     * @return array Result of the close operation
-    * @throws Exception If fiscal year not found or already closed
     */
    public static function close($fiscalYearId)
    {
@@ -337,16 +374,19 @@ class FiscalYear
          // Validate fiscal year exists
          $fiscalYear = $orm->getWhere('fiscalyear', ['FiscalYearID' => $fiscalYearId]);
          if (empty($fiscalYear)) {
-            throw new Exception('Fiscal year not found');
+            Helpers::logError('Fiscal year close error: Fiscal year not found');
+            Helpers::sendFeedback('Fiscal year not found', 404);
          }
 
          if ($fiscalYear[0]['Status'] === 'Closed') {
-            throw new Exception('Fiscal year is already closed');
+            Helpers::logError('Fiscal year close error: Fiscal year is already closed');
+            Helpers::sendFeedback('Fiscal year is already closed', 400);
          }
 
          $branch = $orm->getWhere('branch', ['BranchID' => $fiscalYear[0]['BranchID']]);
          if (empty($branch)) {
-            throw new Exception('Associated branch not found');
+            Helpers::logError('Fiscal year close error: Associated branch not found');
+            Helpers::sendFeedback('Associated branch not found', 400);
          }
 
          $orm->beginTransaction();
@@ -367,11 +407,10 @@ class FiscalYear
          $orm->commit();
          return ['status' => 'success', 'fiscal_year_id' => $fiscalYearId];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->inTransaction()) {
-            $orm->rollBack();
-         }
+         if ($transactionStarted && $orm->inTransaction()) $orm->rollBack();
+
          Helpers::logError('Fiscal year close error: ' . $e->getMessage());
-         throw $e;
+         Helpers::sendFeedback('Fiscal year close failed: ' . $e->getMessage(), 400);
       }
    }
 }
