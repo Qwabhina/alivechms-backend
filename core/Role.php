@@ -45,7 +45,7 @@ class Role
          return ['status' => 'success', 'role_id' => $roleId];
       } catch (Exception $e) {
          Helpers::logError('Role create error: ' . $e->getMessage());
-         throw $e;
+         Helpers::sendFeedback("Role creation failed", 400);
       }
    }
    /**
@@ -134,9 +134,8 @@ class Role
          $orm->commit();
          return ['status' => 'success'];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->in_transaction()) {
-            $orm->rollBack();
-         }
+         if ($transactionStarted && $orm->inTransaction()) $orm->rollBack();
+
          Helpers::logError('Role delete error: ' . $e->getMessage());
          throw $e;
       }
@@ -377,9 +376,8 @@ class Role
          $orm->commit();
          return ['status' => 'success', 'member_id' => $memberId, 'role_id' => $roleId];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->in_transaction()) {
-            $orm->rollBack();
-         }
+         if ($transactionStarted && $orm->inTransaction()) $orm->rollBack();
+
          Helpers::logError('Role assignToMember error: ' . $e->getMessage());
          throw $e;
       }
@@ -431,9 +429,8 @@ class Role
          $orm->commit();
          return ['status' => 'success', 'member_id' => $memberId];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->in_transaction()) {
-            $orm->rollBack();
-         }
+         if ($transactionStarted && $orm->inTransaction()) $orm->rollBack();
+
          Helpers::logError('Role removeFromMember error: ' . $e->getMessage());
          throw $e;
       }
