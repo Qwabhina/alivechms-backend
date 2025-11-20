@@ -59,7 +59,7 @@ class Database
             PDO::ATTR_EMULATE_PREPARES   => false,                         // Use real prepared statements
             PDO::ATTR_PERSISTENT         => false,                         // Do not use persistent connections
             PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES $charset COLLATE utf8mb4_unicode_ci",
-            PDO::MYSQL_ATTR_SSL_CA       => null,                          // Enable in production with valid cert
+            // PDO::MYSQL_ATTR_SSL_CA       => null,                          // Enable in production with valid cert
         ];
 
         $maxRetries = 3;
