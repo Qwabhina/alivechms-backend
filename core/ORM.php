@@ -232,12 +232,12 @@ class ORM
         int $limit = 0,
         int $offset = 0
     ): array {
-        $select = implode(', ', $fields);
-        $sql = "SELECT $select FROM `$baseTable`";
+        $select = implode(',', $fields);
+        $sql = "SELECT " . trim($select) . " FROM $baseTable";
 
         foreach ($joins as $join) {
             $type = strtoupper($join['type'] ?? 'INNER');
-            $sql .= " $type JOIN `{$join['table']}` ON {$join['on']}";
+            $sql .= " $type JOIN {$join['table']} ON {$join['on']}";
         }
 
         if (!empty($conditions)) {
