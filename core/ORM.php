@@ -249,14 +249,14 @@ class ORM
         }
 
         if (!empty($groupBy)) {
-            $sql .= ' GROUP BY ' . implode(', ', array_map(fn($c) => "`$c`", $groupBy));
+            $sql .= ' GROUP BY ' . implode(', ', array_map(fn($c) => "$c", $groupBy));
         }
 
         if (!empty($orderBy)) {
             $order = [];
             foreach ($orderBy as $col => $dir) {
                 $dir = strtoupper($dir) === 'DESC' ? 'DESC' : 'ASC';
-                $order[] = "`$col` $dir";
+                $order[] = "$col $dir";
             }
             $sql .= ' ORDER BY ' . implode(', ', $order);
         }
