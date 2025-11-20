@@ -33,10 +33,21 @@ class Auth
      */
     private static function initKeys(): void
     {
-        if (self::$secretKey === null) {
-            self::$secretKey        = $_ENV['JWT_SECRET']        ?? throw new Exception('JWT_SECRET not configured');
-            self::$refreshSecretKey = $_ENV['JWT_REFRESH_SECRET'] ?? throw new Exception('JWT_REFRESH_SECRET not configured');
+        if (self::$secretKey !== null) {
+            return; // Already initialised
         }
+
+        // These will throw clear exceptions if missing – exactly what we want in production
+        if (!isset($_ENV['JWT_SECRET']) || !isset($_ENV['JWT_REFRESH_SECRET'])) {
+            throw new Exception('JWT secrets not configured. Ensure .env is loaded and contains JWT_SECRET and JWT_REFRESH_SECRET.');
+        }
+
+        if ($_ENV['JWT_SECRET'] === '' || $_ENV['JWT_REFRESH_SECRET'] === '') {
+            throw new Exception('JWT secrets cannot be empty strings.');
+        }
+
+        self::$secretKey        = $_ENV['JWT_SECRET'];
+        self::$refreshSecretKey = $_ENV['JWT_REFRESH_SECRET'];
     }
 
     /**
@@ -70,6 +81,7 @@ class Auth
      */
     public static function generateAccessToken(array $user): string
     {
+        self::initKeys();
         return self::generateToken($user, self::$secretKey, self::ACCESS_TOKEN_TTL);
     }
 
@@ -78,6 +90,7 @@ class Auth
      */
     public static function generateRefreshToken(array $user): string
     {
+        self::initKeys();
         return self::generateToken($user, self::$refreshSecretKey, self::REFRESH_TOKEN_TTL);
     }
 
@@ -137,12 +150,21 @@ class Auth
     public static function getBearerToken(): ?string
     {
         $headers = getallheaders();
-        $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? '';
+        $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
 
-        if (preg_match('/Bearer\s+([a-zA-Z0-9\-._~+/]+=*)/i', $authHeader, $matches)) {
+        if ($authHeader === null) {
+            Helpers::logError('No Authorization header found');
+            return null;
+        }
+
+        if (
+            preg_match('/Bearer\s+([A-Za-z0-9._~-]+={0,2})/i', $authHeader, $matches)
+            || preg_match('/Bearer\s+([A-Za-z0-9\-._~+/]+=*)?/i', $authHeader, $matches)
+        ) {
             return $matches[1];
         }
 
+        Helpers::logError('Invalid Authorization header format: ' . $authHeader);
         return null;
     }
 
@@ -202,7 +224,8 @@ class Auth
                 ['table' => 'memberrole mr', 'on' => 'c.MbrID = mr.MbrID', 'type' => 'LEFT'],
                 ['table' => 'churchrole cr', 'on' => 'mr.ChurchRoleID = cr.RoleID', 'type' => 'LEFT']
             ],
-            fields: ['u.MbrID', 'u.Username', 'u.PasswordHash', 'cr.RoleName'],
+            fields: ['u.MbrID', 'u.Username', 'u.PasswordHash', 'c.*', 'cr.RoleName'],
+            // fields: ['u.MbrID', 'u.Username', 'u.PasswordHash', 'cr.RoleName'],
             conditions: ['u.Username' => ':username', 'c.MbrMembershipStatus' => ':status'],
             params: [':username' => $username, ':status' => 'Active']
         )[0] ?? null;
@@ -230,7 +253,7 @@ class Auth
         $refreshToken = self::generateRefreshToken($userData);
         self::storeRefreshToken($user['MbrID'], $refreshToken);
 
-        unset($user['PasswordHash']);
+        unset($user['PasswordHash'], $user['CreatedAt'], $user['AuthUserID']);
 
         return [
             'status'        => 'success',
