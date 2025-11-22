@@ -77,6 +77,7 @@ try {
         'finance'          => 'FinanceRoutes.php',
         'fiscalyear'       => 'FiscalYearRoutes.php',
         'group'            => 'GroupRoutes.php',
+        'grouptype'        => 'GroupRoutes.php',
         'member'           => 'MemberRoutes.php',
         'membershiptype'   => 'MembershipTypeRoutes.php',
         'permission'       => 'PermissionRoutes.php',
