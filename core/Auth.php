@@ -169,6 +169,52 @@ class Auth
     }
 
     /**
+     * Get current authenticated user ID from token
+     *
+     * @param string|null $token Optional token (defaults to current request)
+     * @return int User ID (MbrID)
+     * @throws Exception If token is invalid or missing
+     */
+    public static function getCurrentUserId(?string $token = null): int
+    {
+        $token ??= self::getBearerToken();
+        if (!$token) {
+            Helpers::sendFeedback('No authentication token provided', 401);
+        }
+
+        $decoded = self::verify($token);
+        if (!$decoded || !isset($decoded['user_id'])) {
+            Helpers::sendFeedback('Invalid or expired token', 401);
+        }
+
+        return (int)$decoded['user_id'];
+    }
+
+    /**
+     * Get branch ID of the current authenticated user
+     *
+     * @param int|null $userId Optional user ID (defaults to current user)
+     * @return int BranchID
+     * @throws Exception If user not found
+     */
+    public static function getUserBranchId(?int $userId = null): int
+    {
+        $userId ??= self::getCurrentUserId();
+        $orm = new ORM();
+
+        $user = $orm->getWhere('churchmember', ['MbrID' => $userId, 'Deleted' => 0]);
+        if (empty($user)) {
+            Helpers::sendFeedback('User not found', 404);
+        }
+
+        if (empty($user[0]['BranchID'])) {
+            Helpers::sendFeedback('User has no branch assigned', 400);
+        }
+
+        return (int)$user[0]['BranchID'];
+    }
+
+    /**
      * Check if user has required permission
      *
      * @param string $token             Access token
