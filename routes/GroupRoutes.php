@@ -1,157 +1,242 @@
 <?php
 
 /**
- * Group API Routes
- * This file handles the routing for group management, including creation, updating, deletion, and retrieval.
- * It checks for authentication and permissions before processing requests.
- * It uses the Group and GroupType models for database interactions and returns JSON responses.
- * Requires authentication via a Bearer token and appropriate permissions. 
+ * Consolidated Group & GroupType API Routes
+ *
+ * Handles all operations for church groups and group types using clean RESTful paths:
+ * - /group/* → Church groups
+ * - /grouptype/* → Group type management
+ *
+ * @package AliveChMS\Routes
+ * @version 1.0.0
+ * @author  Benjamin Ebo Yankson
+ * @since   2025-11-21
  */
-require_once __DIR__ . '/Group.php';
-require_once __DIR__ . '/GroupType.php';
-$action = isset($pathParts[1]) ? $pathParts[1] : '';
-$param = isset($pathParts[2]) ? $pathParts[2] : null;
 
-try {
-   switch ("$method $action") {
-      case 'POST group':
-         Auth::checkPermission($token, 'manage_groups');
-         $data = json_decode(file_get_contents('php://input'), true);
-         echo json_encode(Group::create($data));
-         break;
+require_once __DIR__ . '/../core/Group.php';
+require_once __DIR__ . '/../core/GroupType.php';
 
-      case 'PUT group':
+// All routes in this file require authentication
+if (!$token || !Auth::verify($token)) {
+   Helpers::sendFeedback('Unauthorized: Valid token required', 401);
+}
+
+$subPath = $pathParts[1] ?? '';  // e.g., 'create', 'view', 'all', 'addMember'
+$resourceId = $pathParts[2] ?? null;
+$extraId = $pathParts[3] ?? null; // Used for removeMember/{groupId}/{memberId}
+
+// -----------------------------------------------------------------------------
+// CHURCH GROUPS (/group/*)
+// -----------------------------------------------------------------------------
+if ($pathParts[0] === 'group') {
+
+   switch ("$method $subPath") {
+
+      case 'POST create':
          Auth::checkPermission($token, 'manage_groups');
-         if (!$param) {
-            throw new Exception('Group ID required');
+         $input = json_decode(file_get_contents('php://input'), true);
+         if (!$input) {
+            Helpers::sendFeedback('Invalid JSON payload', 400);
          }
-         $data = json_decode(file_get_contents('php://input'), true);
-         echo json_encode(Group::update($param, $data));
-         break;
-
-      case 'DELETE group':
-         Auth::checkPermission($token, 'manage_groups');
-         if (!$param) {
-            throw new Exception('Group ID required');
+         try {
+            $result = Group::create($input);
+            echo json_encode($result);
+         } catch (Exception $e) {
+            Helpers::sendFeedback($e->getMessage(), 400);
          }
-         echo json_encode(Group::delete($param));
          break;
 
-      case 'GET group':
+      case 'PUT update':
+         Auth::checkPermission($token, 'manage_groups');
+         if (!$resourceId || !is_numeric($resourceId)) {
+            Helpers::sendFeedback('Valid Group ID required', 400);
+         }
+         $input = json_decode(file_get_contents('php://input'), true);
+         if (!$input) {
+            Helpers::sendFeedback('Invalid JSON payload', 400);
+         }
+         try {
+            $result = Group::update((int)$resourceId, $input);
+            echo json_encode($result);
+         } catch (Exception $e) {
+            Helpers::sendFeedback($e->getMessage(), 400);
+         }
+         break;
+
+      case 'DELETE delete':
+         Auth::checkPermission($token, 'manage_groups');
+         if (!$resourceId || !is_numeric($resourceId)) {
+            Helpers::sendFeedback('Valid Group ID required', 400);
+         }
+         try {
+            $result = Group::delete((int)$resourceId);
+            echo json_encode($result);
+         } catch (Exception $e) {
+            Helpers::sendFeedback($e->getMessage(), 400);
+         }
+         break;
+
+      case 'GET view':
          Auth::checkPermission($token, 'view_groups');
-         if (!$param) {
-            throw new Exception('Group ID required');
+         if (!$resourceId || !is_numeric($resourceId)) {
+            Helpers::sendFeedback('Valid Group ID required', 400);
          }
-         echo json_encode(Group::get($param));
+         try {
+            $group = Group::get((int)$resourceId);
+            echo json_encode($group);
+         } catch (Exception $e) {
+            Helpers::sendFeedback($e->getMessage(), 404);
+         }
          break;
 
-      case 'GET groups':
+      case 'GET all':
          Auth::checkPermission($token, 'view_groups');
-         $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-         $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
+         $page   = max(1, (int)($_GET['page'] ?? 1));
+         $limit  = max(1, min(100, (int)($_GET['limit'] ?? 10)));
          $filters = [];
-         if (isset($_GET['type_id'])) {
-            $filters['type_id'] = $_GET['type_id'];
+         if (!empty($_GET['type_id']) && is_numeric($_GET['type_id']))   $filters['type_id'] = (int)$_GET['type_id'];
+         if (!empty($_GET['branch_id']) && is_numeric($_GET['branch_id'])) $filters['branch_id'] = (int)$_GET['branch_id'];
+         if (!empty($_GET['name']))                                     $filters['name'] = trim($_GET['name']);
+         try {
+            $result = Group::getAll($page, $limit, $filters);
+            echo json_encode($result);
+         } catch (Exception $e) {
+            Helpers::sendFeedback('Failed to retrieve groups', 400);
          }
-         if (isset($_GET['branch_id'])) {
-            $filters['branch_id'] = $_GET['branch_id'];
-         }
-         if (isset($_GET['name'])) {
-            $filters['name'] = $_GET['name'];
-         }
-         echo json_encode(Group::getAll($page, $limit, $filters));
          break;
 
-      case 'POST group/members':
+      case 'POST addMember':
          Auth::checkPermission($token, 'manage_groups');
-         if (!$param) {
-            throw new Exception('Group ID required');
+         if (!$resourceId || !is_numeric($resourceId)) {
+            Helpers::sendFeedback('Valid Group ID required', 400);
          }
-         $data = json_decode(file_get_contents('php://input'), true);
-         if (!isset($data['member_id'])) {
-            throw new Exception('Member ID required');
+         $input = json_decode(file_get_contents('php://input'), true);
+         if (!$input || empty($input['member_id'])) {
+            Helpers::sendFeedback('member_id is required', 400);
          }
-         echo json_encode(Group::addMember($param, $data['member_id']));
+         try {
+            $result = Group::addMember((int)$resourceId, (int)$input['member_id']);
+            echo json_encode($result);
+         } catch (Exception $e) {
+            Helpers::sendFeedback($e->getMessage(), 400);
+         }
          break;
 
-      case 'DELETE group/members':
+      case 'DELETE removeMember':
          Auth::checkPermission($token, 'manage_groups');
-         if (!$param || !isset($pathParts[4])) {
-            throw new Exception('Group ID and Member ID required');
+         if (!$resourceId || !is_numeric($resourceId) || !$extraId || !is_numeric($extraId)) {
+            Helpers::sendFeedback('Valid Group ID and Member ID required', 400);
          }
-         echo json_encode(Group::removeMember($param, $pathParts[4]));
+         try {
+            $result = Group::removeMember((int)$resourceId, (int)$extraId);
+            echo json_encode($result);
+         } catch (Exception $e) {
+            Helpers::sendFeedback($e->getMessage(), 400);
+         }
          break;
 
-      case 'GET group/members':
+      case 'GET members':
          Auth::checkPermission($token, 'view_groups');
-         if (!$param) {
-            throw new Exception('Group ID required');
+         if (!$resourceId || !is_numeric($resourceId)) {
+            Helpers::sendFeedback('Valid Group ID required', 400);
          }
-         $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-         $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
-         echo json_encode(Group::getMembers($param, $page, $limit));
-         break;
-
-      case 'POST grouptype':
-         Auth::checkPermission($token, 'manage_group_types');
-         $data = json_decode(file_get_contents('php://input'), true);
-         echo json_encode(GroupType::create($data));
-         break;
-
-      case 'PUT grouptype':
-         Auth::checkPermission($token, 'manage_group_types');
-         if (!$param) {
-            throw new Exception('Group Type ID required');
+         $page  = max(1, (int)($_GET['page'] ?? 1));
+         $limit = max(1, min(100, (int)($_GET['limit'] ?? 10)));
+         try {
+            $result = Group::getMembers((int)$resourceId, $page, $limit);
+            echo json_encode($result);
+         } catch (Exception $e) {
+            Helpers::sendFeedback('Failed to retrieve group members', 400);
          }
-         $data = json_decode(file_get_contents('php://input'), true);
-         echo json_encode(GroupType::update($param, $data));
-         break;
-
-      case 'DELETE grouptype':
-         Auth::checkPermission($token, 'manage_group_types');
-         if (!$param) {
-            throw new Exception('Group Type ID required');
-         }
-         echo json_encode(GroupType::delete($param));
-         break;
-
-      case 'GET grouptype':
-         Auth::checkPermission($token, 'view_group_types');
-         if (!$param) {
-            throw new Exception('Group Type ID required');
-         }
-         echo json_encode(GroupType::get($param));
-         break;
-
-      case 'GET grouptypes':
-         Auth::checkPermission($token, 'view_group_types');
-         $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-         $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
-         echo json_encode(GroupType::getAll($page, $limit));
-         break;
-
-      case 'POST group/messages':
-         Auth::checkPermission($token, 'send_communication');
-         if (!$param) {
-            throw new Exception('Group ID required');
-         }
-         $data = json_decode(file_get_contents('php://input'), true);
-         echo json_encode(Group::sendMessage($param, $data));
-         break;
-
-      case 'GET group/messages':
-         Auth::checkPermission($token, 'view_communication');
-         if (!$param) {
-            throw new Exception('Group ID required');
-         }
-         $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-         $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
-         echo json_encode(Group::getMessages($param, $page, $limit));
          break;
 
       default:
-         Helpers::sendFeedback('Endpoint not found', 404);
+         Helpers::sendFeedback('Group endpoint not found', 404);
    }
-} catch (Exception $e) {
-   Helpers::sendFeedback($e->getMessage(), 400);
+   exit;
 }
+
+// -----------------------------------------------------------------------------
+// GROUP TYPES (/grouptype/*)
+// -----------------------------------------------------------------------------
+if ($pathParts[0] === 'grouptype') {
+
+   switch ("$method $subPath") {
+
+      case 'POST create':
+         Auth::checkPermission($token, 'manage_group_types');
+         $input = json_decode(file_get_contents('php://input'), true);
+         if (!$input || empty($input['name'])) {
+            Helpers::sendFeedback('name is required', 400);
+         }
+         try {
+            $result = GroupType::create($input);
+            echo json_encode($result);
+         } catch (Exception $e) {
+            Helpers::sendFeedback($e->getMessage(), 400);
+         }
+         break;
+
+      case 'PUT update':
+         Auth::checkPermission($token, 'manage_group_types');
+         if (!$resourceId || !is_numeric($resourceId)) {
+            Helpers::sendFeedback('Valid GroupType ID required', 400);
+         }
+         $input = json_decode(file_get_contents('php://input'), true);
+         if (!$input) {
+            Helpers::sendFeedback('Invalid JSON payload', 400);
+         }
+         try {
+            $result = GroupType::update((int)$resourceId, $input);
+            echo json_encode($result);
+         } catch (Exception $e) {
+            Helpers::sendFeedback($e->getMessage(), 400);
+         }
+         break;
+
+      case 'DELETE delete':
+         Auth::checkPermission($token, 'manage_group_types');
+         if (!$resourceId || !is_numeric($resourceId)) {
+            Helpers::sendFeedback('Valid GroupType ID required', 400);
+         }
+         try {
+            $result = GroupType::delete((int)$resourceId);
+            echo json_encode($result);
+         } catch (Exception $e) {
+            Helpers::sendFeedback($e->getMessage(), 400);
+         }
+         break;
+
+      case 'GET view':
+         Auth::checkPermission($token, 'view_group_types');
+         if (!$resourceId || !is_numeric($resourceId)) {
+            Helpers::sendFeedback('Valid GroupType ID required', 400);
+         }
+         try {
+            $type = GroupType::get((int)$resourceId);
+            echo json_encode($type);
+         } catch (Exception $e) {
+            Helpers::sendFeedback($e->getMessage(), 404);
+         }
+         break;
+
+      case 'GET all':
+         Auth::checkPermission($token, 'view_group_types');
+         $page  = max(1, (int)($_GET['page'] ?? 1));
+         $limit = max(1, min(100, (int)($_GET['limit'] ?? 10)));
+         try {
+            $result = GroupType::getAll($page, $limit);
+            echo json_encode($result);
+         } catch (Exception $e) {
+            Helpers::sendFeedback('Failed to retrieve group types', 400);
+         }
+         break;
+
+      default:
+         Helpers::sendFeedback('GroupType endpoint not found', 404);
+   }
+   exit;
+}
+
+// If we reach here, the route was not recognized
+Helpers::sendFeedback('Endpoint not found', 404);
