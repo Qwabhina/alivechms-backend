@@ -1,155 +1,107 @@
 <?php
 
 /**
- * Contribution API Routes
- * This file handles all routes related to contributions, including creation, updating, deletion, and retrieval.
- * It checks for authentication and permissions before processing requests.
- * It uses the Contribution model for database interactions and returns JSON responses.
- * Requires authentication via a Bearer token and appropriate permissions.
+ * Contribution API Routes – RESTful & Convention-Compliant
+ *
+ * Endpoints:
+ * /contribution/create
+ * /contribution/update/{id}
+ * /contribution/delete/{id}
+ * /contribution/restore/{id}
+ * /contribution/view/{id}
+ * /contribution/all
+ * /contribution/total
+ *
+ * @package AliveChMS\Routes
+ * @version 1.0.0
+ * @author  Benjamin Ebo Yankson
+ * @since   2025-11-21
  */
 
 require_once __DIR__ . '/../core/Contribution.php';
 
-if (!$token || !Auth::verify($token)) Helpers::sendFeedback('Unauthorized', 401);
+if (!$token || !Auth::verify($token)) {
+    Helpers::sendFeedback('Unauthorized: Valid token required', 401);
+}
 
-switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
-    case 'POST contribution/create':
-        // Auth::checkPermission($token, 'create_contribution');
-        $input = json_decode(file_get_contents('php://input'), true);
+$action     = $pathParts[1] ?? '';
+$resourceId = $pathParts[2] ?? null;
 
-        try {
-            $result = Contribution::create($input);
-            echo json_encode($result);
-        } catch (Exception $e) {
-            Helpers::sendFeedback($e->getMessage(), 400);
+switch ("$method $action") {
+
+    case 'POST create':
+        Auth::checkPermission($token, 'create_contribution');
+        $payload = json_decode(file_get_contents('php://input'), true);
+        if (!$payload) {
+            Helpers::sendFeedback('Invalid JSON payload', 400);
         }
+        $result = Contribution::create($payload);
+        echo json_encode($result);
         break;
 
-    case 'POST contribution/update':
-        // Auth::checkPermission($token, 'update_contribution');
-        $contributionId = $pathParts[2] ?? null;
-        if (!$contributionId) Helpers::sendFeedback('Contribution ID required', 400);
-
-        $input = json_decode(file_get_contents('php://input'), true);
-        try {
-            $result = Contribution::update($contributionId, $input);
-            echo json_encode($result);
-        } catch (Exception $e) {
-            Helpers::sendFeedback($e->getMessage(), 400);
+    case 'PUT update':
+        Auth::checkPermission($token, 'edit_contribution');
+        if (!$resourceId || !is_numeric($resourceId)) {
+            Helpers::sendFeedback('Contribution ID is required in URL', 400);
         }
+        $payload = json_decode(file_get_contents('php://input'), true) ?? [];
+        $result = Contribution::update((int)$resourceId, $payload);
+        echo json_encode($result);
         break;
 
-    case 'DELETE contribution/delete':
-        // Auth::checkPermission($token, 'delete_contribution');
-        $contributionId = $pathParts[2] ?? null;
-
-        if (!$contributionId) Helpers::sendFeedback('Contribution ID required', 400);
-
-        try {
-            $result = Contribution::delete($contributionId);
-            echo json_encode($result);
-        } catch (Exception $e) {
-            Helpers::sendFeedback($e->getMessage(), 400);
+    case 'DELETE delete':
+        Auth::checkPermission($token, 'delete_contribution');
+        if (!$resourceId || !is_numeric($resourceId)) {
+            Helpers::sendFeedback('Contribution ID is required in URL', 400);
         }
+        $result = Contribution::delete((int)$resourceId);
+        echo json_encode($result);
         break;
 
-    case 'POST contribution/restore':
-        // Auth::checkPermission($token, 'restore_contribution');
-        $contributionId = $pathParts[2] ?? null;
-
-        if (!$contributionId) Helpers::sendFeedback('Contribution ID required', 400);
-
-        try {
-            $result = Contribution::restore($contributionId);
-            echo json_encode($result);
-        } catch (Exception $e) {
-            Helpers::sendFeedback($e->getMessage(), 400);
+    case 'POST restore':
+        Auth::checkPermission($token, 'delete_contribution');
+        if (!$resourceId || !is_numeric($resourceId)) {
+            Helpers::sendFeedback('Contribution ID is required in URL', 400);
         }
+        $result = Contribution::restore((int)$resourceId);
+        echo json_encode($result);
         break;
 
-    case 'GET contribution/view':
-        // Auth::checkPermission($token, 'view_contribution');
-        $contributionId = $pathParts[2] ?? null;
-
-        if (!$contributionId) Helpers::sendFeedback('Contribution ID required', 400);
-
-        try {
-            $contribution = Contribution::get($contributionId);
-            echo json_encode($contribution);
-        } catch (Exception $e) {
-            Helpers::sendFeedback($e->getMessage(), 404);
+    case 'GET view':
+        Auth::checkPermission($token, 'view_contribution');
+        if (!$resourceId || !is_numeric($resourceId)) {
+            Helpers::sendFeedback('Contribution ID is required in URL', 400);
         }
+        $contribution = Contribution::get((int)$resourceId);
+        echo json_encode($contribution);
         break;
 
-    case 'GET contribution/all':
-        // Auth::checkPermission($token, 'view_contribution');
-        $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
-        $limit = isset($_GET['limit']) ? max(1, min(100, intval($_GET['limit']))) : 10;
+    case 'GET all':
+        Auth::checkPermission($token, 'view_contribution');
+        $page   = max(1, (int)($_GET['page'] ?? 1));
+        $limit  = max(1, min(100, (int)($_GET['limit'] ?? 10)));
         $filters = [];
-
-        if (isset($_GET['contribution_type']) && is_numeric($_GET['contribution_type'])) $filters['contribution_type'] = intval($_GET['contribution_type']);
-        if (isset($_GET['payment_option']) && is_numeric($_GET['payment_option'])) $filters['payment_option'] = intval($_GET['payment_option']);
-        if (isset($_GET['fiscal_year']) && !empty($_GET['fiscal_year'])) $filters['fiscal_year'] = intval($_GET['fiscal_year']);
-        if (isset($_GET['start_date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['start_date'])) $filters['start_date'] = $_GET['start_date'];
-        if (isset($_GET['end_date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['end_date'])) $filters['end_date'] = $_GET['end_date'];
-        if (!empty($filters['start_date']) && !empty($filters['end_date']) && $filters['start_date'] > $filters['end_date']) Helpers::sendFeedback('start_date must be before end_date', 400);
-
-        try {
-            $result = Contribution::getAll($page, $limit, $filters);
-            echo json_encode($result);
-        } catch (Exception $e) {
-            Helpers::logError("Contribution retrieval error" . $e->getMessage(), 400);
-            Helpers::sendFeedback($e->getMessage(), 400);
+        foreach (['contribution_type_id', 'member_id', 'fiscal_year_id', 'start_date', 'end_date'] as $key) {
+            if (isset($_GET[$key]) && $_GET[$key] !== '') {
+                $filters[$key] = $_GET[$key];
+            }
         }
+        $result = Contribution::getAll($page, $limit, $filters);
+        echo json_encode($result);
         break;
 
-    case 'GET contribution/average':
-        // Auth::checkPermission($token, 'view_contribution');
-
+    case 'GET total':
+        Auth::checkPermission($token, 'view_contribution');
         $filters = [];
-
-        if (isset($_GET['contribution_type']) && is_numeric($_GET['contribution_type'])) $filters['contribution_type'] = intval($_GET['contribution_type']);
-
-        if (isset($_GET['contributor_id']) && is_numeric($_GET['contributor_id'])) $filters['contributor_id'] = intval($_GET['contributor_id']);
-        if (isset($_GET['payment_option']) && is_numeric($_GET['payment_option'])) $filters['payment_option'] = intval($_GET['payment_option']);
-        if (isset($_GET['fiscal_year']) && !empty($_GET['fiscal_year'])) $filters['fiscal_year'] = intval($_GET['fiscal_year']);
-        if (isset($_GET['start_date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['start_date'])) $filters['start_date'] = $_GET['start_date'];
-        if (isset($_GET['end_date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['end_date'])) $filters['end_date'] = $_GET['end_date'];
-        if (!empty($filters['start_date']) && !empty($filters['end_date']) && $filters['start_date'] > $filters['end_date']) Helpers::sendFeedback('start_date must be before end_date', 400);
-
-        if (empty($filters['start_date']) && empty($filters['end_date']) && empty($filters['fiscal_year'])) Helpers::sendFeedback('At least one of start_date, end_date, or fiscal_year is required.', 400);
-
-        try {
-            $result = Contribution::getAverage($filters);
-            echo json_encode($result);
-        } catch (Exception $e) {
-            Helpers::sendFeedback($e->getMessage(), 400);
+        foreach (['contribution_type_id', 'member_id', 'fiscal_year_id', 'start_date', 'end_date'] as $key) {
+            if (isset($_GET[$key]) && $_GET[$key] !== '') {
+                $filters[$key] = $_GET[$key];
+            }
         }
-        break;
-
-    case 'GET contribution/total':
-        // Auth::checkPermission($token, 'view_contribution');
-        $filters = [];
-
-        if (isset($_GET['contribution_type']) && is_numeric($_GET['contribution_type'])) $filters['contribution_type'] = intval($_GET['contribution_type']);
-        if (isset($_GET['contributor_id']) && is_numeric($_GET['contributor_id'])) $filters['contributor_id'] = intval($_GET['contributor_id']);
-        if (isset($_GET['payment_option']) && is_numeric($_GET['payment_option'])) $filters['payment_option'] = intval($_GET['payment_option']);
-        if (isset($_GET['fiscal_year']) && !empty($_GET['fiscal_year'])) $filters['fiscal_year'] = intval($_GET['fiscal_year']);
-        if (isset($_GET['start_date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['start_date'])) $filters['start_date'] = $_GET['start_date'];
-        if (isset($_GET['end_date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['end_date'])) $filters['end_date'] = $_GET['end_date'];
-        if (!empty($filters['start_date']) && !empty($filters['end_date']) && $filters['start_date'] > $filters['end_date']) Helpers::sendFeedback('start_date must be before end_date', 400);
-
-        if (empty($filters['start_date']) && empty($filters['end_date']) && empty($filters['fiscal_year'])) Helpers::sendFeedback('At least one of start_date, end_date, or fiscal_year is required.', 400);
-
-        try {
-            $result = Contribution::getTotal($filters);
-            echo json_encode($result);
-        } catch (Exception $e) {
-            Helpers::sendFeedback($e->getMessage(), 400);
-        }
+        $result = Contribution::getTotal($filters);
+        echo json_encode($result);
         break;
 
     default:
-        Helpers::sendFeedback('Endpoint not found', 404);
+        Helpers::sendFeedback('Contribution endpoint not found', 404);
 }
-?>
