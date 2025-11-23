@@ -2,26 +2,31 @@
 
 /**
  * Dashboard API Routes
- * This file handles the dashboard-related API routes for the AliveChMS backend.
- * It provides endpoints for fetching dashboard highlights and statistics.
- * Requires authentication via a Bearer token and only allows GET requests.
+ *
+ * Single endpoint: /dashboard/overview
+ *
+ * @package AliveChMS\Routes
+ * @version 1.0.0
+ * @author  Benjamin Ebo Yankson
+ * @since   2025-11-21
  */
+
 require_once __DIR__ . '/../core/Dashboard.php';
 
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') Helpers::sendFeedback('Method not allowed', 405);
-
-if (!$token || !Auth::verify($token)) Helpers::sendFeedback('Unauthorized', 401);
-
-switch ($path) {
-    case 'dashboard/highlights':
-        $highlights = Dashboard::getHighlights();
-        echo json_encode($highlights);
-        // Uncomment the line below if you want to send feedback in a different format
-        // Helpers::sendFeedback($highlights, 200);
-        break;
-
-    default:
-        Helpers::sendFeedback('Endpoint not found', 404);
-        break;
+if (!$token || !Auth::verify($token)) {
+    Helpers::sendFeedback('Unauthorized: Valid token required', 401);
 }
-?>
+
+if ($path !== 'dashboard/overview' || $method !== 'GET') {
+    Helpers::sendFeedback('Endpoint not found', 404);
+}
+
+Auth::checkPermission($token, 'view_dashboard');
+
+try {
+    $overview = Dashboard::getOverview();
+    echo json_encode($overview);
+} catch (Exception $e) {
+    Helpers::logError("Dashboard error: " . $e->getMessage());
+    Helpers::sendFeedback('Failed to load dashboard', 500);
+}
