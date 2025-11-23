@@ -1,99 +1,69 @@
 <?php
 
 /**
- * Finance API Routes
- * This file handles routing for financial reports in the AliveChMS backend, including income statement,
- * budget vs actual, expense summary, contribution summary, and balance sheet. Supports date filtering.
- * It uses the Finance class for business logic and the Auth class for permission checks.
+ * Finance Reporting API Routes – RESTful & Convention-Compliant
+ *
+ * Endpoints:
+ * /finance/income-statement/{fiscalYearId}
+ * /finance/budget-vs-actual/{fiscalYearId}
+ * /finance/expense-summary/{fiscalYearId}
+ * /finance/contribution-summary/{fiscalYearId}
+ * /finance/balance-sheet/{fiscalYearId}
+ *
+ * @package AliveChMS\Routes
+ * @version 1.0.0
+ * @author  Benjamin Ebo Yankson
+ * @since   2025-11-21
  */
+
 require_once __DIR__ . '/../core/Finance.php';
 
 if (!$token || !Auth::verify($token)) {
-   Helpers::sendFeedback('Unauthorized', 401);
+   Helpers::sendFeedback('Unauthorized: Valid token required', 401);
 }
 
-switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
-   case 'GET finance/incomeStatement':
-      // Auth::checkPermission($token, 'view_financial_reports');
-      $fiscalYearId = $pathParts[2] ?? null;
-      if (!$fiscalYearId) {
-         Helpers::sendFeedback('Fiscal year ID required', 400);
-      }
-      $dateFrom = isset($_GET['date_from']) ? $_GET['date_from'] : null;
-      $dateTo = isset($_GET['date_to']) ? $_GET['date_to'] : null;
-      try {
-         $result = Finance::getIncomeStatement($fiscalYearId, $dateFrom, $dateTo);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::sendFeedback($e->getMessage(), $e->getCode() ?: 400);
-      }
+$action        = $pathParts[1] ?? '';
+$fiscalYearId  = $pathParts[2] ?? null;
+
+if (!$fiscalYearId || !is_numeric($fiscalYearId)) {
+   Helpers::sendFeedback('Fiscal Year ID is required in URL', 400);
+}
+
+$dateFrom = $_GET['date_from'] ?? null;
+$dateTo   = $_GET['date_to'] ?? null;
+
+switch ("$method $action") {
+
+   case 'GET income-statement':
+      Auth::checkPermission($token, 'view_financial_reports');
+      $report = Finance::getIncomeStatement((int)$fiscalYearId, $dateFrom, $dateTo);
+      echo json_encode($report);
       break;
 
-   case 'GET finance/budgetVsActual':
-      // Auth::checkPermission($token, 'view_financial_reports');
-      $fiscalYearId = $pathParts[2] ?? null;
-      if (!$fiscalYearId) {
-         Helpers::sendFeedback('Fiscal year ID required', 400);
-      }
-      $dateFrom = isset($_GET['date_from']) ? $_GET['date_from'] : null;
-      $dateTo = isset($_GET['date_to']) ? $_GET['date_to'] : null;
-      try {
-         $result = Finance::getBudgetVsActual($fiscalYearId, $dateFrom, $dateTo);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::sendFeedback($e->getMessage(), $e->getCode() ?: 400);
-      }
+   case 'GET budget-vs-actual':
+      Auth::checkPermission($token, 'view_financial_reports');
+      $report = Finance::getBudgetVsActual((int)$fiscalYearId, $dateFrom, $dateTo);
+      echo json_encode($report);
       break;
 
-   case 'GET finance/expenseSummary':
-      // Auth::checkPermission($token, 'view_financial_reports');
-      $fiscalYearId = $pathParts[2] ?? null;
-      if (!$fiscalYearId) {
-         Helpers::sendFeedback('Fiscal year ID required', 400);
-      }
-      $dateFrom = isset($_GET['date_from']) ? $_GET['date_from'] : null;
-      $dateTo = isset($_GET['date_to']) ? $_GET['date_to'] : null;
-      try {
-         $result = Finance::getExpenseSummary($fiscalYearId, $dateFrom, $dateTo);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::sendFeedback($e->getMessage(), $e->getCode() ?: 400);
-      }
+   case 'GET expense-summary':
+      Auth::checkPermission($token, 'view_financial_reports');
+      $report = Finance::getExpenseSummary((int)$fiscalYearId, $dateFrom, $dateTo);
+      echo json_encode($report);
       break;
 
-   case 'GET finance/contributionSummary':
-      // Auth::checkPermission($token, 'view_financial_reports');
-      $fiscalYearId = $pathParts[2] ?? null;
-      if (!$fiscalYearId) {
-         Helpers::sendFeedback('Fiscal year ID required', 400);
-      }
-      $dateFrom = isset($_GET['date_from']) ? $_GET['date_from'] : null;
-      $dateTo = isset($_GET['date_to']) ? $_GET['date_to'] : null;
-      try {
-         $result = Finance::getContributionSummary($fiscalYearId, $dateFrom, $dateTo);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::sendFeedback($e->getMessage(), $e->getCode() ?: 400);
-      }
+   case 'GET contribution-summary':
+      Auth::checkPermission($token, 'view_financial_reports');
+      $report = Finance::getContributionSummary((int)$fiscalYearId, $dateFrom, $dateTo);
+      echo json_encode($report);
       break;
 
-   case 'GET finance/balanceSheet':
-      // Auth::checkPermission($token, 'view_financial_reports');
-      $fiscalYearId = $pathParts[2] ?? null;
-      if (!$fiscalYearId) {
-         Helpers::sendFeedback('Fiscal year ID required', 400);
-      }
-      $dateFrom = isset($_GET['date_from']) ? $_GET['date_from'] : null;
-      $dateTo = isset($_GET['date_to']) ? $_GET['date_to'] : null;
-      try {
-         $result = Finance::getBalanceSheet($fiscalYearId, $dateFrom, $dateTo);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::sendFeedback($e->getMessage(), $e->getCode() ?: 400);
-      }
+   case 'GET balance-sheet':
+      Auth::checkPermission($token, 'view_financial_reports');
+      $report = Finance::getBalanceSheet((int)$fiscalYearId, $dateFrom, $dateTo);
+      echo json_encode($report);
       break;
 
    default:
-      Helpers::sendFeedback('Request Malformed', 405);
-      break;
+      Helpers::sendFeedback('Finance endpoint not found', 404);
 }
