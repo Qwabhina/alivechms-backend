@@ -1,216 +1,102 @@
 <?php
 
 /**
- * Event API Routes
- * This file handles event-related API routes for the AliveChMS backend.
- * It provides endpoints for creating, updating, deleting, viewing events,
- * managing attendance, and generating reports.
- * Requires authentication via a Bearer token and appropriate permissions.
+ * Event API Routes – RESTful & Convention-Compliant
+ *
+ * Endpoints:
+ * /event/create
+ * /event/update/{id}
+ * /event/delete/{id}
+ * /event/view/{id}
+ * /event/all
+ * /event/attendance/bulk/{id}
+ *
+ * @package AliveChMS\Routes
+ * @version 1.0.0
+ * @author  Benjamin Ebo Yankson
+ * @since   2025-11-21
  */
 
 require_once __DIR__ . '/../core/Event.php';
 
-if (!$token || !Auth::verify($token)) Helpers::sendFeedback('Unauthorized', 401);
+if (!$token || !Auth::verify($token)) {
+   Helpers::sendFeedback('Unauthorized: Valid token required', 401);
+}
 
-switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
-   case 'POST event/create':
-      Auth::checkPermission($token, 'create_event');
-      $input = json_decode(file_get_contents('php://input'), true);
-      try {
-         $decoded = Auth::verify($token);
-         $input['created_by'] = $decoded['user_id'];
-         $result = Event::create($input);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::sendFeedback($e->getMessage(), 400);
-      }
+$action     = $pathParts[1] ?? '';
+$resourceId = $pathParts[2] ?? null;
+
+switch ("$method $action") {
+
+   case 'POST create':
+      Auth::checkPermission($token, 'manage_events');
+      $payload = json_decode(file_get_contents('php://input'), true);
+      if (!$payload) Helpers::sendFeedback('Invalid JSON', 400);
+      $result = Event::create($payload);
+      echo json_encode($result);
       break;
 
-   case 'PUT event/update':
-      Auth::checkPermission($token, 'create_event');
-      $eventId = $pathParts[2] ?? null;
-      if (!$eventId) {
-         Helpers::sendFeedback('Event ID required', 400);
-      }
-      $input = json_decode(file_get_contents('php://input'), true);
-      try {
-         $decoded = Auth::verify($token);
-         $input['created_by'] = $decoded['user_id'];
-         $result = Event::update($eventId, $input);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::sendFeedback($e->getMessage(), 400);
-      }
+   case 'PUT update':
+      Auth::checkPermission($token, 'manage_events');
+      if (!$resourceId || !is_numeric($resourceId)) Helpers::sendFeedback('Event ID required', 400);
+      $payload = json_decode(file_get_contents('php://input'), true) ?? [];
+      $result = Event::update((int)$resourceId, $payload);
+      echo json_encode($result);
       break;
 
-   case 'DELETE event/delete':
-      Auth::checkPermission($token, 'delete_event');
-      $eventId = $pathParts[2] ?? null;
-      if (!$eventId) {
-         Helpers::sendFeedback('Event ID required', 400);
-      }
-      try {
-         $result = Event::delete($eventId);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::sendFeedback($e->getMessage(), 400);
-      }
+   case 'DELETE delete':
+      Auth::checkPermission($token, 'manage_events');
+      if (!$resourceId || !is_numeric($resourceId)) Helpers::sendFeedback('Event ID required', 400);
+      $result = Event::delete((int)$resourceId);
+      echo json_encode($result);
       break;
 
-   case 'GET event/view':
-      // Auth::checkPermission($token, 'view_event');
-      $eventId = $pathParts[2] ?? null;
-      if (!$eventId) {
-         Helpers::sendFeedback('Event ID required', 400);
-      }
-      try {
-         $event = Event::get($eventId);
-         echo json_encode($event);
-      } catch (Exception $e) {
-         Helpers::sendFeedback($e->getMessage(), 404);
-      }
+   case 'GET view':
+      Auth::checkPermission($token, 'view_events');
+      if (!$resourceId || !is_numeric($resourceId)) Helpers::sendFeedback('Event ID required', 400);
+      $event = Event::get((int)$resourceId);
+      echo json_encode($event);
       break;
 
-   case 'GET event/all':
-      // Auth::checkPermission($token, 'view_event');
-      $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
-      $limit = isset($_GET['limit']) ? max(1, min(100, intval($_GET['limit']))) : 10;
+   case 'GET all':
+      Auth::checkPermission($token, 'view_events');
+      $page = max(1, (int)($_GET['page'] ?? 1));
+      $limit = max(1, min(100, (int)($_GET['limit'] ?? 10)));
       $filters = [];
-      if (isset($_GET['branch_id'])) {
-         $filters['branch_id'] = $_GET['branch_id'];
+      foreach (['branch_id', 'start_date', 'end_date'] as $key) {
+         if (isset($_GET[$key]) && $_GET[$key] !== '') $filters[$key] = $_GET[$key];
       }
-      if (isset($_GET['date_from'])) {
-         $filters['date_from'] = $_GET['date_from'];
-      }
-      if (isset($_GET['date_to'])) {
-         $filters['date_to'] = $_GET['date_to'];
-      }
-      try {
-         $result = Event::getAll($page, $limit, $filters);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::sendFeedback($e->getMessage(), 400);
-      }
+      $result = Event::getAll($page, $limit, $filters);
+      echo json_encode($result);
       break;
 
-   case 'POST event/attendance':
-      // Auth::checkPermission($token, 'manage_attendance');
-      $eventId = $pathParts[2] ?? null;
-      if (!$eventId) {
-         Helpers::sendFeedback('Event ID required', 400);
-      }
-      $input = json_decode(file_get_contents('php://input'), true);
-      try {
-         $result = Event::recordAttendance($eventId, $input['member_id'], $input['status']);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::sendFeedback($e->getMessage(), 400);
-      }
+   case 'POST attendance/bulk':
+      Auth::checkPermission($token, 'record_attendance');
+      if (!$resourceId || !is_numeric($resourceId)) Helpers::sendFeedback('Event ID required', 400);
+      $payload = json_decode(file_get_contents('php://input'), true);
+      if (!$payload || empty($payload['attendances'])) Helpers::sendFeedback('attendances array required', 400);
+      $result = Event::recordBulkAttendance((int)$resourceId, $payload);
+      echo json_encode($result);
       break;
 
-   case 'POST event/volunteer':
-      Auth::checkPermission($token, 'manage_volunteers');
-      $eventId = $pathParts[2] ?? null;
-      if (!$eventId) {
-         Helpers::sendFeedback('Event ID required', 400);
+   case 'POST attendance/single':
+      Auth::checkPermission($token, 'record_attendance');
+      if (!$resourceId || !is_numeric($resourceId)) {
+         Helpers::sendFeedback('Event ID required in URL', 400);
       }
-      $input = json_decode(file_get_contents('php://input'), true);
-      try {
-         $result = Event::assignVolunteer($eventId, $input['member_id'], $input['role']);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::sendFeedback($e->getMessage(), 400);
+      $payload = json_decode(file_get_contents('php://input'), true);
+      if (!$payload || empty($payload['member_id'])) {
+         Helpers::sendFeedback('member_id is required', 400);
       }
+      $status = $payload['status'] ?? 'Present';
+      $result = Event::recordSingleAttendance(
+         (int)$resourceId,
+         (int)$payload['member_id'],
+         $status
+      );
+      echo json_encode($result);
       break;
-
-   case 'GET event/attendance':
-      // Auth::checkPermission($token, 'view_event');
-      $eventId = $pathParts[2] ?? null;
-      if (!$eventId) {
-         Helpers::sendFeedback('Event ID required', 400);
-      }
-      try {
-         $result = Event::getAttendance($eventId);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::sendFeedback($e->getMessage(), 400);
-      }
-      break;
-
-   case 'GET event/volunteers':
-      Auth::checkPermission($token, 'view_event');
-      $eventId = $pathParts[2] ?? null;
-      if (!$eventId) {
-         Helpers::sendFeedback('Event ID required', 400);
-      }
-      try {
-         $result = Event::getVolunteers($eventId);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::sendFeedback($e->getMessage(), 400);
-      }
-      break;
-
-   case 'GET event/report':
-      // Auth::checkPermission($token, 'view_event');
-      $type = $pathParts[2] ?? null;
-
-      if (!$type) {
-         Helpers::sendFeedback('Report type required', 400);
-      }
-      $filters = [];
-      if (isset($_GET['date_from'])) {
-         $filters['date_from'] = $_GET['date_from'];
-      }
-      // if (isset($_GET['branch_id'])) {
-      //    $filters['branch_id'] = $_GET['branch_id'];
-      // }
-      if (isset($_GET['date_to'])) {
-         $filters['date_to'] = $_GET['date_to'];
-      }
-      if (isset($_GET['event_name'])) {
-         $filters['event_name'] = $_GET['event_name'];
-      }
-      try {
-         $result = Event::getReports($type, $filters);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::sendFeedback($e->getMessage(), 400);
-      }
-      break;
-
-   case 'POST event/bulk-attendance':
-      Auth::checkPermission($token, 'manage_attendance');
-      $eventId = $pathParts[2] ?? null;
-      if (!$eventId) {
-         Helpers::sendFeedback('Event ID required', 400);
-      }
-      $input = json_decode(file_get_contents('php://input'), true);
-      try {
-         $result = Event::bulkAttendance($eventId, $input);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::sendFeedback($e->getMessage(), 400);
-      }
-      break;
-
-   case 'POST event/self-attendance':
-      Auth::checkPermission($token, 'record_own_attendance');
-      $eventId = $pathParts[2] ?? null;
-      if (!$eventId) {
-         Helpers::sendFeedback('Event ID required', 400);
-      }
-      $input = json_decode(file_get_contents('php://input'), true);
-      try {
-         $decoded = Auth::verify($token);
-         $result = Event::selfAttendance($eventId, $input['status'], $decoded['user_id']);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::sendFeedback($e->getMessage(), 400);
-      }
-      break;
-
 
    default:
-      Helpers::sendFeedback('Endpoint not found', 404);
+      Helpers::sendFeedback('Event endpoint not found', 404);
 }
