@@ -1,175 +1,147 @@
 <?php
+
+/**
+ * Communication & Notification System
+ *
+ * Supports In-App, SMS, and Email notifications with group broadcasting.
+ *
+ * @package AliveChMS\Core
+ * @version 1.0.0
+ * @author  Benjamin Ebo Yankson
+ * @since   2025-11-21
+ */
+
+declare(strict_types=1);
+
 class Communication
 {
    /**
-    * Sends a message to a member via email or SMS.
-    * @param int $memberId The ID of the member to send the message to.
-    * @param string $message The message content.
-    * @param string $type The type of message ('email' or 'sms').
-    * @return array The status of the message sending operation.
-    * @throws Exception If the member does not exist or if sending fails.
+    * Send notification to individual or group
+    *
+    * @param array $data Message data
+    * @return array Success response
     */
-   public static function sendMessage($memberId, $message, $type)
+   public static function send(array $data): array
    {
       $orm = new ORM();
-      $member = $orm->getWhere('churchmember', ['MbrID' => $memberId]);
-      if (!$member) {
-         throw new Exception('Member not found');
+
+      Helpers::validateInput($data, [
+         'title'    => 'required|max:200',
+         'message'  => 'required',
+         'channel'  => 'required|in:InApp,SMS,Email',
+      ]);
+
+      $sentBy = Auth::getCurrentUserId($token ?? '');
+
+      $commId = $orm->insert('communication', [
+         'Title'          => $data['title'],
+         'Message'        => $data['message'],
+         'SentBy'         => $sentBy,
+         'TargetMemberID' => !empty($data['member_id']) ? (int)$data['member_id'] : null,
+         'TargetGroupID'  => !empty($data['group_id']) ? (int)$data['group_id'] : null,
+         'Channel'        => $data['channel'],
+         'Status'         => 'Pending',
+         'CreatedAt'      => date('Y-m-d H:i:s')
+      ])['id'];
+
+      // Queue delivery
+      if (!empty($data['member_id'])) {
+         self::queueIndividual($commId, (int)$data['member_id'], $data['channel'], $orm);
+      } elseif (!empty($data['group_id'])) {
+         self::queueGroup($commId, (int)$data['group_id'], $data['channel'], $orm);
       }
 
-      // Logic to send email or SMS based on type
-      if ($type === 'email') {
-         // Send email logic here
-         // For example, using PHPMailer or similar library
-      } elseif ($type === 'sms') {
-         // Send SMS logic here
-         // For example, using Twilio or similar service
-      } else {
-         throw new Exception('Invalid message type');
-      }
+      Helpers::logError("Notification queued: CommID $commId");
 
-      return ['status' => 'success', 'message' => 'Message sent successfully'];
+      return ['status' => 'success', 'communication_id' => $commId];
    }
-   /**
-    * Generates an engagement report for a member.
-    * Includes group memberships, event attendance, volunteering, and contributions.
-    * @param int $memberId The ID of the member to generate the report for.
-    * @param array $filters Optional filters for date range and branch.
-    * @return array The engagement report data.
-    * @throws Exception If member not found or database operations fail.
-    */
-   public static function getEngagementReport($memberId, $filters = [])
+
+   private static function queueIndividual(int $commId, int $memberId, string $channel, ORM $orm): void
    {
-      $orm = new ORM();
-      try {
-         // Validate member
-         $member = $orm->getWhere('churchmember', ['MbrID' => $memberId, 'Deleted' => 0]);
-         if (empty($member)) {
-            throw new Exception('Invalid member');
-         }
-
-         $conditions = [];
-         $params = [];
-         if (!empty($filters['start_date'])) {
-            $conditions[] = 'DATE >= :start_date';
-            $params[':start_date'] = $filters['start_date'];
-         }
-         if (!empty($filters['end_date'])) {
-            $conditions[] = 'DATE <= :end_date';
-            $params[':end_date'] = $filters['end_date'];
-         }
-         if (!empty($filters['branch_id'])) {
-            $conditions[] = 'BranchID = :branch_id';
-            $params[':branch_id'] = $filters['branch_id'];
-         }
-
-         // Group memberships
-         $groups = $orm->getWhere(
-            'group_member gm',
-            array_merge(['gm.MbrID' => ':mbr_id'], $conditions),
-            array_merge([':mbr_id' => $memberId], $params)
-         );
-
-         // Event attendance
-         $attendance = $orm->getWhere(
-            'event_attendance ea',
-            array_merge(['ea.MbrID' => ':mbr_id'], $conditions),
-            array_merge([':mbr_id' => $memberId], $params)
-         );
-
-         // Volunteering
-         $volunteering = $orm->getWhere(
-            'event_volunteer ev',
-            array_merge(['ev.MbrID' => ':mbr_id'], $conditions),
-            array_merge([':mbr_id' => $memberId], $params)
-         );
-
-         // Contributions
-         $contributions = $orm->getWhere(
-            'contribution c',
-            array_merge(['c.MbrID' => ':mbr_id'], $conditions),
-            array_merge([':mbr_id' => $memberId], $params)
-         );
-
-         $totalContributions = array_sum(array_column($contributions, 'ContributionAmount'));
-
-         return [
-            'member_id' => $memberId,
-            'groups_count' => count($groups),
-            'events_attended' => count($attendance),
-            'volunteer_instances' => count($volunteering),
-            'contributions_count' => count($contributions),
-            'contributions_total' => $totalContributions,
-            'details' => [
-               'groups' => $groups,
-               'attendance' => $attendance,
-               'volunteering' => $volunteering,
-               'contributions' => $contributions
-            ]
-         ];
-      } catch (Exception $e) {
-         Helpers::logError('MemberEngagement getEngagementReport error: ' . $e->getMessage());
-         throw $e;
-      }
+      $orm->insert('communication_delivery', [
+         'CommID'   => $commId,
+         'MbrID'    => $memberId,
+         'Channel'  => $channel
+      ]);
    }
-   /**
-    * Sends an engagement message to a member based on specific triggers.
-    * Validates input, checks member existence, and sends the message if trigger conditions are met.
-    * @param array $data The engagement message data including member ID, title, message, and trigger.
-    * @return array The status of the message sending and communication ID.
-    * @throws Exception If validation fails, member not found, or trigger conditions not met.
-    */
-   public static function sendEngagementMessage($data)
+
+   private static function queueGroup(int $commId, int $groupId, string $channel, ORM $orm): void
    {
-      $orm = new ORM();
-      try {
-         // Validate input
-         Helpers::validateInput($data, [
-            'member_id' => 'required|numeric',
-            'title' => 'required',
-            'message' => 'required',
-            'trigger' => 'required|in:low_attendance,no_contributions,no_groups'
+      $members = $orm->runQuery(
+         "SELECT MbrID FROM groupmember WHERE GroupID = :gid",
+         [':gid' => $groupId]
+      );
+
+      foreach ($members as $m) {
+         $orm->insert('communication_delivery', [
+            'CommID'  => $commId,
+            'MbrID'   => (int)$m['MbrID'],
+            'Channel' => $channel
          ]);
-
-         // Validate member
-         $member = $orm->getWhere('churchmember', ['MbrID' => $data['member_id'], 'Deleted' => 0]);
-         if (empty($member)) {
-            throw new Exception('Invalid member');
-         }
-
-         // Verify trigger condition
-         $filters = ['start_date' => date('Y-m-d', strtotime('-30 days'))];
-         $report = self::getEngagementReport($data['member_id'], $filters)['details'];
-
-         $validTrigger = false;
-         switch ($data['trigger']) {
-            case 'low_attendance':
-               $validTrigger = count($report['attendance']) < 2;
-               break;
-            case 'no_contributions':
-               $validTrigger = count($report['contributions']) == 0;
-               break;
-            case 'no_groups':
-               $validTrigger = count($report['groups']) == 0;
-               break;
-         }
-
-         if (!$validTrigger) {
-            throw new Exception('Engagement trigger condition not met');
-         }
-
-         $communicationId = $orm->insert('communication', [
-            'Title' => $data['title'],
-            'Message' => $data['message'],
-            'SentBy' => $data['created_by'] ?? 0,
-            'TargetMemberID' => $data['member_id'],
-            'DeliveryStatus' => 'Pending'
-         ])['id'];
-
-         return ['status' => 'success', 'communication_id' => $communicationId];
-      } catch (Exception $e) {
-         Helpers::logError('MemberEngagement sendEngagementMessage error: ' . $e->getMessage());
-         throw $e;
       }
+   }
+
+   /**
+    * Get notifications for current user
+    *
+    * @param int $page  Page number
+    * @param int $limit Items per page
+    * @return array Notifications
+    */
+   public static function getMyNotifications(int $page = 1, int $limit = 20): array
+   {
+      $orm = new ORM();
+      $userId = Auth::getCurrentUserId($token ?? '');
+      $offset = ($page - 1) * $limit;
+
+      $notifications = $orm->selectWithJoin(
+         baseTable: 'communication_delivery cd',
+         joins: [['table' => 'communication c', 'on' => 'cd.CommID = c.CommID']],
+         fields: [
+            'c.CommID',
+            'c.Title',
+            'c.Message',
+            'c.Channel',
+            'c.CreatedAt',
+            'cd.Status',
+            'cd.DeliveredAt'
+         ],
+         conditions: ['cd.MbrID' => ':uid'],
+         params: [':uid' => $userId],
+         orderBy: ['c.CreatedAt' => 'DESC'],
+         limit: $limit,
+         offset: $offset
+      );
+
+      $total = $orm->runQuery("SELECT COUNT(*) AS total FROM communication_delivery WHERE MbrID = :uid", [':uid' => $userId])[0]['total'];
+
+      return [
+         'data' => $notifications,
+         'pagination' => [
+            'page' => $page,
+            'limit' => $limit,
+            'total' => (int)$total,
+            'pages' => (int)ceil($total / $limit)
+            ]
+      ];
+   }
+
+   /**
+    * Mark notification as read
+    *
+    * @param int $commId Communication ID
+    * @return array Success response
+    */
+   public static function markAsRead(int $commId): array
+   {
+      $orm = new ORM();
+      $userId = Auth::getCurrentUserId($token ?? '');
+
+      $orm->update('communication_delivery', [
+         'Status'      => 'Sent',
+         'DeliveredAt' => date('Y-m-d H:i:s')
+      ], ['CommID' => $commId, 'MbrID' => $userId]);
+
+      return ['status' => 'success'];
    }
 }
