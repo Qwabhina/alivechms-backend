@@ -1,37 +1,28 @@
 <?php
 
 /**
- * Object-Relational Mapper (ORM)
+ * Lightweight Object-Relational Mapper (ORM)
  *
- * Lightweight, secure PDO-based ORM providing common database operations
- * with prepared statements, transactions, and flexible querying.
+ * Provides secure, prepared-statement-based CRUD operations,
+ * flexible joins, transactions, pagination, and soft-delete support.
  *
- * Features:
- * - Full CRUD operations with parameter binding
- * - Transaction management
- * - Flexible join builder with pagination and grouping
- * - Soft-delete support
- * - Comprehensive error handling and logging
+ * All table/column names are automatically escaped with backticks
+ * only when necessary. Aliases in joins are preserved correctly.
  *
- * @package AliveChMS\Core
- * @version 1.0.0
- * @author  Benjamin Ebo Yankson
- * @since   2025-11-19
+ * @package  AliveChMS\Core
+ * @version  1.0.0
+ * @author   Benjamin Ebo Yankson
+ * @since    2025-November
  */
 
 declare(strict_types=1);
 
 class ORM
 {
-    /**
-     * PDO instance obtained from Database singleton
-     *
-     * @var PDO
-     */
     private PDO $pdo;
 
     /**
-     * Constructor - initializes PDO connection
+     * Initialise PDO connection via Database singleton
      */
     public function __construct()
     {
@@ -39,10 +30,9 @@ class ORM
     }
 
     /**
-     * Begin a database transaction
+     * Begin a transaction
      *
      * @return void
-     * @throws PDOException On failure
      */
     public function beginTransaction(): void
     {
@@ -53,7 +43,6 @@ class ORM
      * Commit the current transaction
      *
      * @return void
-     * @throws PDOException On failure
      */
     public function commit(): void
     {
@@ -61,10 +50,9 @@ class ORM
     }
 
     /**
-     * Roll back the current transaction
+     * Roll back the current transaction if active
      *
      * @return void
-     * @throws PDOException On failure
      */
     public function rollBack(): void
     {
@@ -74,7 +62,7 @@ class ORM
     }
 
     /**
-     * Check if a transaction is active
+     * Check if a transaction is currently active
      *
      * @return bool
      */
@@ -84,11 +72,11 @@ class ORM
     }
 
     /**
-     * Execute a raw query with parameters
+     * Execute raw query with parameters
      *
-     * @param string $sql    SQL query
+     * @param string $sql    SQL statement
      * @param array  $params Associative array of parameters
-     * @return array         Result set as associative arrays
+     * @return array Result set as associative arrays
      */
     public function runQuery(string $sql, array $params = []): array
     {
@@ -103,15 +91,15 @@ class ORM
     }
 
     /**
-     * Insert a record and return the inserted ID
+     * Insert record and return inserted ID
      *
      * @param string $table Table name
-     * @param array  $data  Associative array of column => value
-     * @return array        ['id' => lastInsertId]
+     * @param array  $data  Associative column => value array
+     * @return array ['id' => lastInsertId]
      */
     public function insert(string $table, array $data): array
     {
-        $columns = implode('`, `', array_keys($data));
+        $columns      = implode('`, `', array_keys($data));
         $placeholders = ':' . implode(', :', array_keys($data));
 
         $sql = "INSERT INTO `$table` (`$columns`) VALUES ($placeholders)";
@@ -121,7 +109,7 @@ class ORM
             $stmt->execute($data);
             return ['id' => (int)$this->pdo->lastInsertId()];
         } catch (PDOException $e) {
-            Helpers::logError("ORM insert failed on table $table: " . $e->getMessage());
+            Helpers::logError("ORM insert failed on table `$table`: " . $e->getMessage());
             throw $e;
         }
     }
@@ -131,8 +119,8 @@ class ORM
      *
      * @param string $table      Table name
      * @param array  $data       Columns to update
-     * @param array  $conditions WHERE clause conditions
-     * @return int               Number of affected rows
+     * @param array  $conditions WHERE conditions (column => value)
+     * @return int Number of affected rows
      */
     public function update(string $table, array $data, array $conditions): int
     {
@@ -158,17 +146,17 @@ class ORM
             $stmt->execute($params);
             return $stmt->rowCount();
         } catch (PDOException $e) {
-            Helpers::logError("ORM update failed on table $table: " . $e->getMessage());
+            Helpers::logError("ORM update failed on table `$table`: " . $e->getMessage());
             throw $e;
         }
     }
 
     /**
-     * Delete records matching conditions (hard delete)
+     * Hard delete records matching conditions
      *
      * @param string $table      Table name
      * @param array  $conditions WHERE conditions
-     * @return int               Number of affected rows
+     * @return int Number of affected rows
      */
     public function delete(string $table, array $conditions): int
     {
@@ -181,7 +169,7 @@ class ORM
             $stmt->execute($conditions);
             return $stmt->rowCount();
         } catch (PDOException $e) {
-            Helpers::logError("ORM delete failed on table $table: " . $e->getMessage());
+            Helpers::logError("ORM delete failed on table `$table`: " . $e->getMessage());
             throw $e;
         }
     }
@@ -192,7 +180,7 @@ class ORM
      * @param string $table  Table name
      * @param int    $id     Primary key value
      * @param string $column Primary key column (default 'id')
-     * @return int           Number of affected rows
+     * @return int Number of affected rows
      */
     public function softDelete(string $table, int $id, string $column = 'id'): int
     {
@@ -202,24 +190,24 @@ class ORM
             $stmt->execute(['id' => $id]);
             return $stmt->rowCount();
         } catch (PDOException $e) {
-            Helpers::logError("ORM softDelete failed on table $table (ID: $id): " . $e->getMessage());
+            Helpers::logError("ORM softDelete failed on table `$table` (ID: $id): " . $e->getMessage());
             throw $e;
         }
     }
 
     /**
-     * Flexible SELECT with joins, conditions, pagination, ordering, and grouping
+     * Flexible SELECT with joins, conditions, ordering, grouping and pagination
      *
-     * @param string $baseTable   Base table
+     * @param string $baseTable   Base table (with alias if needed)
      * @param array  $joins       Join definitions: ['table' => ..., 'on' => ..., 'type' => 'LEFT|INNER']
      * @param array  $fields      Fields to select (default *)
-     * @param array  $conditions  Associative array of column => placeholder
+     * @param array  $conditions  Column => placeholder mapping
      * @param array  $params      Bound parameters
      * @param array  $orderBy     ['column' => 'ASC|DESC']
      * @param array  $groupBy     Columns for GROUP BY
-     * @param int    $limit       LIMIT clause
-     * @param int    $offset      OFFSET clause
-     * @return array              Result set
+     * @param int    $limit       LIMIT value
+     * @param int    $offset      OFFSET value
+     * @return array Result set
      */
     public function selectWithJoin(
         string $baseTable,
@@ -232,7 +220,7 @@ class ORM
         int $limit = 0,
         int $offset = 0
     ): array {
-        $select = implode(',', $fields);
+        $select = implode(', ', $fields);
         $sql = "SELECT " . trim($select) . " FROM $baseTable";
 
         foreach ($joins as $join) {
@@ -272,14 +260,14 @@ class ORM
     }
 
     /**
-     * Simple WHERE query (convenience wrapper)
+     * Simple WHERE query wrapper
      *
      * @param string $table      Table name
      * @param array  $conditions Column => value
-     * @param array  $params     Optional bound params override
+     * @param array  $params     Optional parameter override
      * @param int    $limit      Optional limit
      * @param int    $offset     Optional offset
-     * @return array             Result set
+     * @return array Result set
      */
     public function getWhere(string $table, array $conditions, array $params = [], int $limit = 0, int $offset = 0): array
     {
@@ -306,12 +294,12 @@ class ORM
     }
 
     /**
-     * Get all records from a table (with optional pagination)
+     * Retrieve all records from a table with optional pagination
      *
      * @param string $table  Table name
      * @param int    $limit  Optional limit
      * @param int    $offset Optional offset
-     * @return array         Result set
+     * @return array Result set
      */
     public function getAll(string $table, int $limit = 0, int $offset = 0): array
     {
