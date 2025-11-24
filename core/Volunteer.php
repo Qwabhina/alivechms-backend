@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Volunteer Management Class – Final Production Version
+ * Volunteer Management Class
  *
  * Full lifecycle: role management, assignment, confirmation, removal, reporting.
  * Multi-branch aware, fully audited, and secure.

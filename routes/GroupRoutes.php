@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Consolidated Group & GroupType API Routes
+ * Group & GroupType API Routes
  *
  * Handles all operations for church groups and group types using clean RESTful paths:
  * - /group/* → Church groups

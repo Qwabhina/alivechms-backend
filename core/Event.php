@@ -1,8 +1,7 @@
 <?php
 
 /**
- * Event Management Class – Full Featured
- *
+ * Event Management Class
  * Complete church event lifecycle including creation, updates, attendance,
  * volunteer assignment, bulk operations, and reporting.
  *
