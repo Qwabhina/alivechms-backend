@@ -1,15 +1,17 @@
 <?php
 
 /**
- * Authentication and Authorization Manager
+ * Authentication & Authorization Manager
  *
- * Handles JWT-based authentication, token generation, verification,
- * refresh tokens, permission checks, and secure logout.
+ * Handles JWT generation, verification, refresh-token lifecycle,
+ * permission checks, secure logout, and user context retrieval.
  *
- * @package AliveChMS\Core
- * @version 1.0.0
- * @author  Benjamin Ebo Yankson
- * @since   2025-11-19
+ * All tokens use separate secrets and HS256 algorithm.
+ *
+ * @package  AliveChMS\Core
+ * @version  1.0.0
+ * @author   Benjamin Ebo Yankson
+ * @since    2025-November
  */
 
 declare(strict_types=1);
@@ -25,91 +27,105 @@ class Auth
     private const ACCESS_TOKEN_TTL  = 1800;  // 30 minutes
     private const REFRESH_TOKEN_TTL = 86400; // 24 hours
 
-    private static ?string $secretKey        = null;
-    private static ?string $refreshSecretKey = null;
+    private static ?string $accessSecret  = null;
+    private static ?string $refreshSecret = null;
 
     /**
-     * Initialize JWT secrets from environment variables
+     * Initialise JWT secrets from environment
+     *
+     * @return void
+     * @throws Exception If secrets are missing or empty
      */
-    private static function initKeys(): void
+    private static function initSecrets(): void
     {
-        if (self::$secretKey !== null) {
+        if (self::$accessSecret !== null) {
             return; // Already initialised
         }
 
-        // These will throw clear exceptions if missing – exactly what we want in production
-        if (!isset($_ENV['JWT_SECRET']) || !isset($_ENV['JWT_REFRESH_SECRET'])) {
-            throw new Exception('JWT secrets not configured. Ensure .env is loaded and contains JWT_SECRET and JWT_REFRESH_SECRET.');
+        $access  = $_ENV['JWT_SECRET']        ?? '';
+        $refresh = $_ENV['JWT_REFRESH_SECRET'] ?? '';
+
+        if ($access === '' || $refresh === '') {
+            throw new Exception('JWT secrets are not configured in .env');
         }
 
-        if ($_ENV['JWT_SECRET'] === '' || $_ENV['JWT_REFRESH_SECRET'] === '') {
-            throw new Exception('JWT secrets cannot be empty strings.');
-        }
-
-        self::$secretKey        = $_ENV['JWT_SECRET'];
-        self::$refreshSecretKey = $_ENV['JWT_REFRESH_SECRET'];
+        self::$accessSecret  = $access;
+        self::$refreshSecret = $refresh;
     }
 
     /**
      * Generate a JWT token
      *
-     * @param array  $user    User data (MbrID, Username, Role)
-     * @param string $secret  Secret key
-     * @param int    $ttl     Time to live in seconds
-     * @return string         Encoded JWT
+     * @param array  $payload User payload
+     * @param string $secret  Secret key to use
+     * @param int    $ttl     Time-to-live in seconds
+     * @return string Encoded JWT
      */
-    private static function generateToken(array $user, string $secret, int $ttl): string
+    private static function generateToken(array $payload, string $secret, int $ttl): string
     {
-        self::initKeys();
+        self::initSecrets();
 
-        $issuedAt  = time();
-        $expireAt  = $issuedAt + $ttl;
-
-        $payload = [
-            'iat'      => $issuedAt,
-            'exp'      => $expireAt,
-            'user_id'  => $user['MbrID'],
-            'username' => $user['Username'],
-            'role'     => $user['Role'] ?? [], // Role can be array or string
-        ];
+        $now = time();
+        $payload['iat'] = $now;
+        $payload['exp'] = $now + $ttl;
 
         return JWT::encode($payload, $secret, 'HS256');
     }
 
     /**
-     * Generate access token
+     * Generate access token (30 minutes)
+     *
+     * @param array $user User data (MbrID, Username, Role[])
+     * @return string Access token
      */
     public static function generateAccessToken(array $user): string
     {
-        self::initKeys();
-        return self::generateToken($user, self::$secretKey, self::ACCESS_TOKEN_TTL);
+        self::initSecrets();
+
+        $payload = [
+            'user_id'  => $user['MbrID'],
+            'username' => $user['Username'],
+            'role'     => $user['Role'] ?? [],
+        ];
+
+        return self::generateToken($payload, self::$accessSecret, self::ACCESS_TOKEN_TTL);
     }
 
     /**
-     * Generate refresh token
+     * Generate refresh token (24 hours)
+     *
+     * @param array $user User data (MbrID, Username)
+     * @return string Refresh token
      */
     public static function generateRefreshToken(array $user): string
     {
-        self::initKeys();
-        return self::generateToken($user, self::$refreshSecretKey, self::REFRESH_TOKEN_TTL);
+        self::initSecrets();
+
+        $payload = [
+            'user_id'  => $user['MbrID'],
+            'username' => $user['Username'],
+        ];
+
+        return self::generateToken($payload, self::$refreshSecret, self::REFRESH_TOKEN_TTL);
     }
 
     /**
      * Store refresh token in database
      *
-     * @param int    $userId User ID
-     * @param string $token  Refresh token
+     * @param int    $userId      Member ID
+     * @param string $refreshToken Refresh token string
+     * @return void
      */
-    public static function storeRefreshToken(int $userId, string $token): void
+    public static function storeRefreshToken(int $userId, string $refreshToken): void
     {
         $orm = new ORM();
 
-        $decoded   = JWT::decode($token, new Key(self::$refreshSecretKey, 'HS256'));
+        $decoded   = JWT::decode($refreshToken, new Key(self::$refreshSecret, 'HS256'));
         $expiresAt = date('Y-m-d H:i:s', $decoded->exp);
 
         $orm->insert('refresh_tokens', [
             'user_id'     => $userId,
-            'token'       => $token,
+            'token'       => $refreshToken,
             'expires_at'  => $expiresAt,
             'revoked'     => 0,
             'created_at'  => date('Y-m-d H:i:s')
@@ -119,27 +135,22 @@ class Auth
     /**
      * Verify and decode a JWT token
      *
-     * @param string      $token  JWT token
-     * @param string|null $secret Override secret (null = use default)
-     * @return object|false       Decoded payload or false on failure
+     * @param string      $token  JWT string
+     * @param string|null $secret Override secret (null = access secret)
+     * @return array|false Decoded payload or false on failure
      */
     public static function verify(string $token, ?string $secret = null)
     {
-        self::initKeys();
-        $secret ??= self::$secretKey;
+        self::initSecrets();
+        $secret ??= self::$accessSecret;
 
         try {
             $decoded = JWT::decode($token, new Key($secret, 'HS256'));
             return (array) $decoded;
-        } catch (ExpiredException $e) {
-            Helpers::logError("Token expired: " . $e->getMessage());
-        } catch (BeforeValidException | SignatureInvalidException $e) {
-            Helpers::logError("Invalid token signature: " . $e->getMessage());
-        } catch (Exception $e) {
-            Helpers::logError("Token verification failed: " . $e->getMessage());
+        } catch (ExpiredException | BeforeValidException | SignatureInvalidException | Exception $e) {
+            Helpers::logError('JWT verification failed: ' . $e->getMessage());
+            return false;
         }
-
-        return false;
     }
 
     /**
@@ -150,52 +161,44 @@ class Auth
     public static function getBearerToken(): ?string
     {
         $headers = getallheaders();
-        $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
+        $header  = $headers['Authorization'] ?? $headers['authorization'] ?? '';
 
-        if ($authHeader === null) {
-            Helpers::logError('No Authorization header found');
-            return null;
-        }
-
-        if (
-            preg_match('/Bearer\s+([A-Za-z0-9._~-]+={0,2})/i', $authHeader, $matches)
-            || preg_match('/Bearer\s+([A-Za-z0-9\-._~+/]+=*)?/i', $authHeader, $matches)
-        ) {
+        if (preg_match('/Bearer\s+(\S+)/i', $header, $matches)) {
             return $matches[1];
         }
 
-        Helpers::logError('Invalid Authorization header format: ' . $authHeader);
         return null;
     }
 
     /**
-     * Get current authenticated user ID from token
+     * Get current authenticated user ID
      *
-     * @param string|null $token Optional token (defaults to current request)
+     * @param string|null $token Optional token (uses request header if null)
      * @return int User ID (MbrID)
      * @throws Exception If token is invalid or missing
      */
     public static function getCurrentUserId(?string $token = null): int
     {
         $token ??= self::getBearerToken();
+
         if (!$token) {
-            Helpers::sendFeedback('No authentication token provided', 401);
+            Helpers::sendFeedback('Authentication token missing', 401);
         }
 
-        $decoded = self::verify($token);
-        if (!$decoded || !isset($decoded['user_id'])) {
+        $payload = self::verify($token);
+        if (!$payload || !isset($payload['user_id'])) {
             Helpers::sendFeedback('Invalid or expired token', 401);
         }
 
-        return (int)$decoded['user_id'];
+        return (int)$payload['user_id'];
     }
 
     /**
-     * Get branch ID of the current authenticated user
+     * Get branch ID of the currently authenticated user
      *
-     * @param int|null $userId Optional user ID (defaults to current user)
+     * @param int|null $userId Optional user ID (uses current user if null)
      * @return int BranchID
-     * @throws Exception If user not found
+     * @throws Exception If user or branch not found
      */
     public static function getUserBranchId(?int $userId = null): int
     {
@@ -203,30 +206,26 @@ class Auth
         $orm = new ORM();
 
         $user = $orm->getWhere('churchmember', ['MbrID' => $userId, 'Deleted' => 0]);
-        if (empty($user)) {
-            Helpers::sendFeedback('User not found', 404);
-        }
-
-        if (empty($user[0]['BranchID'])) {
-            Helpers::sendFeedback('User has no branch assigned', 400);
+        if (empty($user) || empty($user[0]['BranchID'])) {
+            Helpers::sendFeedback('User or branch not found', 404);
         }
 
         return (int)$user[0]['BranchID'];
     }
 
     /**
-     * Check if user has required permission
+     * Check if current user has required permission
      *
-     * @param string $token             Access token
-     * @param string $requiredPermission Permission name
+     * @param string      $token             Access token
+     * @param string      $requiredPermission Permission name
      * @return void
-     * @throws Exception On invalid token or insufficient permission
+     * @throws Exception On insufficient permission
      */
     public static function checkPermission(string $token, string $requiredPermission): void
     {
-        $decoded = self::verify($token);
-        if (!$decoded || !isset($decoded['user_id'])) {
-            Helpers::sendFeedback('Unauthorized: Invalid or expired token', 401);
+        $payload = self::verify($token);
+        if (!$payload || !isset($payload['user_id'])) {
+            Helpers::sendFeedback('Invalid token', 401);
         }
 
         $orm = new ORM();
@@ -241,23 +240,23 @@ class Auth
             ],
             fields: ['p.PermissionName'],
             conditions: ['u.MbrID' => ':user_id'],
-            params: [':user_id' => $decoded['user_id']]
+            params: [':user_id' => $payload['user_id']]
         );
 
         $permissions = array_column($results, 'PermissionName');
 
         if (!in_array($requiredPermission, $permissions, true)) {
-            Helpers::logError("Forbidden access attempt by user {$decoded['user_id']} for permission: $requiredPermission");
+            Helpers::logError("Permission denied: user {$payload['user_id']} → $requiredPermission");
             Helpers::sendFeedback('Forbidden: Insufficient permissions', 403);
         }
     }
 
     /**
-     * Login user and issue tokens
+     * Perform user login and issue tokens
      *
      * @param string $username Username
-     * @param string $password Plain password
-     * @return array           Tokens and user data
+     * @param string $password Plain-text password
+     * @return array Tokens and user data
      */
     public static function login(string $username, string $password): array
     {
@@ -271,14 +270,13 @@ class Auth
                 ['table' => 'churchrole cr', 'on' => 'mr.ChurchRoleID = cr.RoleID', 'type' => 'LEFT']
             ],
             fields: ['u.MbrID', 'u.Username', 'u.PasswordHash', 'c.*', 'cr.RoleName'],
-            // fields: ['u.MbrID', 'u.Username', 'u.PasswordHash', 'cr.RoleName'],
             conditions: ['u.Username' => ':username', 'c.MbrMembershipStatus' => ':status'],
             params: [':username' => $username, ':status' => 'Active']
         )[0] ?? null;
 
         if (!$user || !password_verify($password, $user['PasswordHash'])) {
             Helpers::logError("Failed login attempt for username: $username");
-            Helpers::sendFeedback('Incorrect login credentials', 401);
+            Helpers::sendFeedback('Invalid credentials', 401);
         }
 
         $roles = $orm->runQuery(
@@ -299,7 +297,7 @@ class Auth
         $refreshToken = self::generateRefreshToken($userData);
         self::storeRefreshToken($user['MbrID'], $refreshToken);
 
-        unset($user['PasswordHash'], $user['CreatedAt'], $user['AuthUserID']);
+        unset($user['PasswordHash']);
 
         return [
             'status'        => 'success',
@@ -310,52 +308,43 @@ class Auth
     }
 
     /**
-     * Refresh access token using valid refresh token
+     * Refresh access token using a valid refresh token
      *
      * @param string $refreshToken Valid refresh token
-     * @return array               New tokens
+     * @return array New tokens
      */
     public static function refreshAccessToken(string $refreshToken): array
     {
-        if (empty($refreshToken)) {
+        if ($refreshToken === '') {
             Helpers::sendFeedback('Refresh token required', 400);
         }
 
-        $decoded = self::verify($refreshToken, self::$refreshSecretKey);
-        if (!$decoded) {
+        $payload = self::verify($refreshToken, self::$refreshSecret);
+        if (!$payload) {
             Helpers::sendFeedback('Invalid or expired refresh token', 401);
         }
 
         $orm = new ORM();
-        $stored = $orm->getWhere('refresh_tokens', [
-            'token'   => $refreshToken,
-            'revoked' => 0
-        ]);
+        $stored = $orm->getWhere('refresh_tokens', ['token' => $refreshToken, 'revoked' => 0]);
 
         if (empty($stored)) {
             Helpers::sendFeedback('Refresh token revoked or invalid', 401);
         }
 
-        $tokenRecord = $stored[0];
-        if (strtotime($tokenRecord['expires_at']) < time()) {
-            $orm->update('refresh_tokens', ['revoked' => 1], ['id' => $tokenRecord['id']]);
-            Helpers::sendFeedback('Refresh token expired', 401);
-        }
-
         // Revoke old refresh token
-        $orm->update('refresh_tokens', ['revoked' => 1], ['id' => $tokenRecord['id']]);
+        $orm->update('refresh_tokens', ['revoked' => 1], ['id' => $stored[0]['id']]);
 
-        // Fetch fresh user roles
+        // Regenerate roles (in case they changed)
         $roles = $orm->runQuery(
             "SELECT cr.RoleName FROM memberrole mr 
              JOIN churchrole cr ON mr.ChurchRoleID = cr.RoleID 
              WHERE mr.MbrID = :id",
-            [':id' => $decoded['user_id']]
+            [':id' => $payload['user_id']]
         );
 
         $userData = [
-            'MbrID'    => $decoded['user_id'],
-            'Username' => $decoded['username'],
+            'MbrID'    => $payload['user_id'],
+            'Username' => $payload['username'],
             'Role'     => array_column($roles, 'RoleName')
         ];
 
@@ -369,13 +358,14 @@ class Auth
     }
 
     /**
-     * Logout - revoke refresh token
+     * Logout – revoke refresh token
      *
      * @param string $refreshToken Token to revoke
+     * @return void
      */
     public static function logout(string $refreshToken): void
     {
-        if (empty($refreshToken)) {
+        if ($refreshToken === '') {
             Helpers::sendFeedback('Refresh token required', 400);
         }
 
