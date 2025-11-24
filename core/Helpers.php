@@ -1,48 +1,132 @@
 <?php
 
-/** 
- * Helpers Class
- * Provides utility functions for validation, error handling, and date calculations.
- * Includes methods for validating input data, adding CORS headers, calculating date differences,
- * and sending error responses.
+/**
+ * Helpers – Utility Class
+ * Enhanced validation, secure CORS, consistent responses and logging
+ * @package AliveChMS\Core
+ * @version 1.0.0
+ * @author  Benjamin Ebo Yankson
+ * @since   2025-11-19
  */
+
+declare(strict_types=1);
+
 class Helpers
 {
     /**
-     * Validates input data against specified rules.
-     * Throws an exception if validation fails.
-     * @param array $data The input data to validate.
-     * @param array $rules The validation rules, e.g., ['name' => 'required', 'email' => 'email'].
-     * @throws Exception if validation fails with specific error messages.
+     * Send consistent JSON feedback and terminate script
      */
-    public static function validateInput($data, $rules)
+    public static function sendFeedback(string $message, int $code = 400, string $type = 'error'): void
+    {
+        http_response_code($code);
+        echo json_encode([
+            'status'  => $type,
+            'message' => $message,
+            'code'    => $code,
+            'timestamp' => date('c')
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    /**
+     * Secure CORS – change origin in production
+     */
+    public static function addCorsHeaders(): void
+    {
+        $allowedOrigin = $_ENV['ALLOWED_ORIGINS'] ?? '*'; // e.g., https://app.alivechms.org
+        $allowedMethods = $_ENV['ALLOWED_METHODS'] ?? 'GET, POST';
+        $allowedHeaders = $_ENV['ALLOWED_HEADERS'] ?? 'Authorization, Content-Type, X-Requested-With';
+
+        header("Access-Control-Allow-Origin: $allowedOrigin");
+        header("Access-Control-Allow-Methods: $allowedMethods");
+        header("Access-Control-Allow-Headers: $allowedHeaders");
+        header('Access-Control-Allow-Credentials: true');
+
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            http_response_code(204);
+            exit;
+        }
+    }
+
+    /**
+     * Robust input validation with support for common rules
+     */
+    public static function validateInput(array $data, array $rules): void
     {
         $errors = [];
-        foreach ($rules as $field => $rule) {
-            if (strpos($rule, 'required') !== false && empty($data[$field])) {
-                $errors[] = "$field is required";
-            }
-            if (strpos($rule, 'email') !== false && !filter_var($data[$field], FILTER_VALIDATE_EMAIL)) {
-                $errors[] = "$field must be a valid email";
-            }
-            if (strpos($rule, 'numeric') !== false && !is_numeric($data[$field])) {
-                $errors[] = "$field must be numeric";
+
+        foreach ($rules as $field => $ruleString) {
+            $value = $data[$field] ?? null;
+            $rulesList = explode('|', $ruleString);
+
+            foreach ($rulesList as $rule) {
+                $param = null;
+                if (str_contains($rule, ':')) {
+                    [$rule, $param] = explode(':', $rule, 2);
+                }
+
+                switch ($rule) {
+                    case 'required':
+                        if ($value === null || $value === '') {
+                            $errors[] = "$field is required";
+                        }
+                        break;
+                    case 'email':
+                        if ($value && !filter_var($value, FILTER_VALIDATE_EMAIL)) {
+                            $errors[] = "$field must be a valid email";
+                        }
+                        break;
+                    case 'numeric':
+                        if ($value !== null && !is_numeric($value)) {
+                            $errors[] = "$field must be numeric";
+                        }
+                        break;
+                    case 'date':
+                        if ($value && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+                            $errors[] = "$field must be YYYY-MM-DD";
+                        }
+                        break;
+                    case 'phone':
+                        if ($value && !preg_match('/^\+?[0-9\s\-\(\)]{10,20}$/', $value)) {
+                            $errors[] = "$field is not a valid phone number";
+                        }
+                        break;
+                    case 'max':
+                        if ($value && is_string($value) && strlen($value) > (int)$param) {
+                            $errors[] = "$field must not exceed $param characters";
+                        }
+                        break;
+                    case 'in':
+                        $allowed = explode(',', $param ?? '');
+                        if ($value && !in_array($value, $allowed, true)) {
+                            $errors[] = "$field must be one of: " . implode(', ', $allowed);
+                        }
+                        break;
+                }
             }
         }
+
         if (!empty($errors)) {
-            throw new Exception(implode(', ', $errors));
+            throw new Exception(implode('; ', $errors));
         }
     }
+
     /**
-     * Adds CORS headers to the response.
-     * This allows cross-origin requests from any domain.
+     * Secure error logging – never expose path in response
      */
-    public static function addCorsHeaders()
+    public static function logError(string $message): void
     {
-        header('Access-Control-Allow-Origin: *');
-        header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE');
-        header('Access-Control-Allow-Headers: Authorization, Content-Type');
+        $logDir = __DIR__ . '/../logs';
+        if (!is_dir($logDir)) {
+            mkdir($logDir, 0755, true);
+        }
+        $logFile = $logDir . '/app.log';
+        $timestamp = date('Y-m-d H:i:s');
+        $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 5);
+        $caller = $trace[1]['function'] ?? 'unknown';
+        error_log("[$timestamp] $caller: $message" . PHP_EOL, 3, $logFile);
     }
+
     /**
      * Calculates the quotient and remainder of two numbers.
      * This is used to determine how many times one number can fit into another and what is left over.
@@ -119,29 +203,5 @@ class Helpers
             $date_text .= "Yesterday";
         }
         return $date_text;
-    }
-    /**
-     * Sends a JSON error response with a specific message and HTTP status code.
-     * Sets the HTTP response code and returns a JSON object with the error message.
-     * @param string $message The error message to return.
-     * @param int $code The HTTP status code to set (default is 400).
-     */
-    public static function sendFeedback($message, $code = 400, $type = "error")
-    {
-        http_response_code($code);
-        echo json_encode([$type => $message, 'code' => $code]);
-        exit;
-    }
-    /**
-     * Logs an error message to a file.
-     * Creates the logs directory if it does not exist.
-     * @param string $message The error message to log.
-     */
-    public static function logError($message)
-    {
-        if (!file_exists($_SERVER['DOCUMENT_ROOT'] . "/logs/app.log")) {
-            mkdir($_SERVER['DOCUMENT_ROOT'] . "/logs", 0777, true);
-        }
-        file_put_contents($_SERVER['DOCUMENT_ROOT'] . "/logs/app.log", date('Y-m-d H:i:s') . ' - ' . $message . PHP_EOL, FILE_APPEND);
     }
 }

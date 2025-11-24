@@ -1,198 +1,225 @@
 <?php
 
-/** Object Relational Mapping Class
- * Provides methods for database operations using PDO
- * Implements basic CRUD operations and transactions
- * Supports soft deletes and complex queries with joins
+/**
+ * Object-Relational Mapper (ORM)
+ *
+ * Lightweight, secure PDO-based ORM providing common database operations
+ * with prepared statements, transactions, and flexible querying.
+ *
+ * Features:
+ * - Full CRUD operations with parameter binding
+ * - Transaction management
+ * - Flexible join builder with pagination and grouping
+ * - Soft-delete support
+ * - Comprehensive error handling and logging
+ *
+ * @package AliveChMS\Core
+ * @version 1.0.0
+ * @author  Benjamin Ebo Yankson
+ * @since   2025-11-19
  */
+
+declare(strict_types=1);
 
 class ORM
 {
     /**
-     * @var PDO The PDO connection instance
+     * PDO instance obtained from Database singleton
+     *
+     * @var PDO
      */
-    private $pdo;
+    private PDO $pdo;
+
     /**
-     * Constructor initializes the PDO connection
-     * Sets error mode to exception for better error handling
-     *  * Get the PDO connection instance
-     * @return PDO
+     * Constructor - initializes PDO connection
      */
     public function __construct()
     {
         $this->pdo = Database::getInstance()->getConnection();
-        $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     }
+
     /**
-     * Begin a transaction
-     * @throws Exception if the transaction cannot be started
+     * Begin a database transaction
+     *
+     * @return void
+     * @throws PDOException On failure
      */
-    public function beginTransaction()
+    public function beginTransaction(): void
     {
         $this->pdo->beginTransaction();
     }
+
     /**
      * Commit the current transaction
-     * @throws Exception if the commit fails
+     *
+     * @return void
+     * @throws PDOException On failure
      */
-    public function commit()
+    public function commit(): void
     {
         $this->pdo->commit();
     }
+
     /**
      * Roll back the current transaction
-     * @throws Exception if the rollback fails
+     *
+     * @return void
+     * @throws PDOException On failure
      */
-    public function rollBack()
+    public function rollBack(): void
     {
-        $this->pdo->rollBack();
+        if ($this->pdo->inTransaction()) {
+            $this->pdo->rollBack();
+        }
     }
+
     /**
-     * Check if a transaction is currently active
-     * @return bool True if in transaction, false otherwise
+     * Check if a transaction is active
+     *
+     * @return bool
      */
-    public function inTransaction()
+    public function inTransaction(): bool
     {
         return $this->pdo->inTransaction();
     }
-    /**
-     * Get all records from a specified table
-     * @param string $table The name of the table
-     * @return array An array of all records in the table
-     */
-    public function getAll(string $table)
-    {
-        $stmt = $this->pdo->query("SELECT * FROM `$table`");
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-    /**
-     * Get a record by its ID from a specified table
-     * @param string $table The name of the table
-     * @param mixed $id The ID of the record to retrieve
-     * @return array The record with the specified ID
-     */
-    public function getById(string $table, $id)
-    {
-        $sql = "SELECT * FROM `$table` WHERE id = :id";
-        return $this->runQuery($sql, ['id' => $id]);
-    }
-    /**
-     * Get records by a specific column value
-     * @param string $table The name of the table
-     * @param string $column The column to filter by
-     * @param mixed $value The value to match in the column
-     * @return array An array of records matching the criteria
-     */
-    public function getByColumn(string $table, string $column, $value)
-    {
-        $sql = "SELECT * FROM `$table` WHERE `$column` = :value";
-        return $this->runQuery($sql, ['value' => $value]);
-    }
-    /**
-     * Get records matching multiple conditions
-     * @param string $table The name of the table
-     * @param array $conditions An associative array of column-value pairs for filtering
-     * @return array An array of records matching the conditions
-     */
-    public function getWhere(string $table, array $conditions)
-    {
-        $whereClause = implode(' AND ', array_map(fn($k) => "`$k` = :$k", array_keys($conditions)));
-        $sql = "SELECT * FROM `$table` WHERE $whereClause";
-        return $this->runQuery($sql, $conditions);
-    }
-    /**
-     * Insert a new record into a specified table
-     * @param string $table The name of the table
-     * @param array $data An associative array of column-value pairs to insert
-     * @return array An array containing the ID of the newly inserted record
-     */
-    public function insert(string $table, array $data)
-    {
-        $columns = implode(', ', array_keys($data));
-        $placeholders = ':' . implode(', :', array_keys($data));
-        $sql = "INSERT INTO `$table` ($columns) VALUES ($placeholders)";
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($data);
-        return ['id' => $this->pdo->lastInsertId()];
-    }
-    /**
-     * Update records in a specified table
-     * @param string $table The name of the table
-     * @param array $data An associative array of column-value pairs to update
-     * @param array $conditions An associative array of column-value pairs for filtering which records to update
-     * @return array An array containing the number of rows affected by the update
-     */
-    public function update(string $table, array $data, array $conditions)
-    {
-        $setClause = implode(', ', array_map(fn($k) => "`$k` = :$k", array_keys($data)));
-        $whereClause = implode(' AND ', array_map(fn($k) => "`$k` = :cond_$k", array_keys($conditions)));
 
-        $params = array_merge(
-            $data,
-            array_combine(
-                array_map(fn($k) => "cond_$k", array_keys($conditions)),
-                array_values($conditions)
-            )
-        );
+    /**
+     * Execute a raw query with parameters
+     *
+     * @param string $sql    SQL query
+     * @param array  $params Associative array of parameters
+     * @return array         Result set as associative arrays
+     */
+    public function runQuery(string $sql, array $params = []): array
+    {
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            Helpers::logError("ORM runQuery failed: " . $e->getMessage() . " | SQL: $sql | Params: " . json_encode($params));
+            throw $e;
+        }
+    }
+
+    /**
+     * Insert a record and return the inserted ID
+     *
+     * @param string $table Table name
+     * @param array  $data  Associative array of column => value
+     * @return array        ['id' => lastInsertId]
+     */
+    public function insert(string $table, array $data): array
+    {
+        $columns = implode('`, `', array_keys($data));
+        $placeholders = ':' . implode(', :', array_keys($data));
+
+        $sql = "INSERT INTO `$table` (`$columns`) VALUES ($placeholders)";
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($data);
+            return ['id' => (int)$this->pdo->lastInsertId()];
+        } catch (PDOException $e) {
+            Helpers::logError("ORM insert failed on table $table: " . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
+     * Update records matching conditions
+     *
+     * @param string $table      Table name
+     * @param array  $data       Columns to update
+     * @param array  $conditions WHERE clause conditions
+     * @return int               Number of affected rows
+     */
+    public function update(string $table, array $data, array $conditions): int
+    {
+        if (empty($data) || empty($conditions)) {
+            return 0;
+        }
+
+        $setClause = implode(', ', array_map(fn($k) => "`$k` = :set_$k", array_keys($data)));
+        $whereClause = implode(' AND ', array_map(fn($k) => "`$k` = :where_$k", array_keys($conditions)));
+
+        $params = [];
+        foreach ($data as $k => $v) {
+            $params["set_$k"] = $v;
+        }
+        foreach ($conditions as $k => $v) {
+            $params["where_$k"] = $v;
+        }
 
         $sql = "UPDATE `$table` SET $setClause WHERE $whereClause";
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($params);
-        return ['rows_affected' => $stmt->rowCount()];
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+            return $stmt->rowCount();
+        } catch (PDOException $e) {
+            Helpers::logError("ORM update failed on table $table: " . $e->getMessage());
+            throw $e;
+        }
     }
+
     /**
-     * Delete records from a specified table
-     * @param string $table The name of the table
-     * @param array $conditions An associative array of column-value pairs for filtering which records to delete
-     * @return array An array containing the number of rows affected by the delete operation
+     * Delete records matching conditions (hard delete)
+     *
+     * @param string $table      Table name
+     * @param array  $conditions WHERE conditions
+     * @return int               Number of affected rows
      */
-    public function delete(string $table, array $conditions)
+    public function delete(string $table, array $conditions): int
     {
         $whereClause = implode(' AND ', array_map(fn($k) => "`$k` = :$k", array_keys($conditions)));
+
         $sql = "DELETE FROM `$table` WHERE $whereClause";
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($conditions);
-        return ['rows_affected' => $stmt->rowCount()];
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($conditions);
+            return $stmt->rowCount();
+        } catch (PDOException $e) {
+            Helpers::logError("ORM delete failed on table $table: " . $e->getMessage());
+            throw $e;
+        }
     }
+
     /**
-     * Soft delete a record by setting a 'Deleted' flag
-     * @param string $table The name of the table
-     * @param mixed $value The value of the record to soft delete
-     * @param string $column The column to match (default is 'id')
-     * @return array An array containing the number of rows affected by the soft delete
+     * Soft delete by setting Deleted = 1
+     *
+     * @param string $table  Table name
+     * @param int    $id     Primary key value
+     * @param string $column Primary key column (default 'id')
+     * @return int           Number of affected rows
      */
-    public function softDelete(string $table, $value, $column = 'id')
+    public function softDelete(string $table, int $id, string $column = 'id'): int
     {
         $sql = "UPDATE `$table` SET `Deleted` = 1 WHERE `$column` = :id";
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute(['id' => $value]);
-        Helpers::logError("Deleted Member with ID $value");
-        return ['rows_affected' => $stmt->rowCount()];
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute(['id' => $id]);
+            return $stmt->rowCount();
+        } catch (PDOException $e) {
+            Helpers::logError("ORM softDelete failed on table $table (ID: $id): " . $e->getMessage());
+            throw $e;
+        }
     }
+
     /**
-     * Run a custom SQL query with parameters
-     * @param string $sql The SQL query to execute
-     * @param array $params An associative array of parameters to bind to the query
-     * @return array The result set as an associative array
-     */
-    public function runQuery(string $sql, array $params = [])
-    {
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($params);
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-    /**
-     * Select records with optional joins, conditions, and pagination
-     * @param string $baseTable The base table to select from
-     * @param array $joins An array of join definitions
-     * @param array $fields The fields to select
-     * @param array $conditions Conditions for the WHERE clause
-     * @param array $params Parameters for the query
-     * @param array $orderBy Order by clauses
-     * @param array $groupBy Group by clauses
-     * @param int $limit Limit for pagination
-     * @param int $offset Offset for pagination
-     * @return array The result set as an associative array
+     * Flexible SELECT with joins, conditions, pagination, ordering, and grouping
+     *
+     * @param string $baseTable   Base table
+     * @param array  $joins       Join definitions: ['table' => ..., 'on' => ..., 'type' => 'LEFT|INNER']
+     * @param array  $fields      Fields to select (default *)
+     * @param array  $conditions  Associative array of column => placeholder
+     * @param array  $params      Bound parameters
+     * @param array  $orderBy     ['column' => 'ASC|DESC']
+     * @param array  $groupBy     Columns for GROUP BY
+     * @param int    $limit       LIMIT clause
+     * @param int    $offset      OFFSET clause
+     * @return array              Result set
      */
     public function selectWithJoin(
         string $baseTable,
@@ -205,50 +232,96 @@ class ORM
         int $limit = 0,
         int $offset = 0
     ): array {
-        $select = implode(', ', $fields);
-        $sql = "SELECT {$select} FROM {$baseTable}";
+        $select = implode(',', $fields);
+        $sql = "SELECT " . trim($select) . " FROM $baseTable";
 
         foreach ($joins as $join) {
             $type = strtoupper($join['type'] ?? 'INNER');
-            $table = $join['table'];
-            $on = $join['on'];
-            $sql .= " {$type} JOIN {$table} ON {$on}";
+            $sql .= " $type JOIN {$join['table']} ON {$join['on']}";
         }
 
         if (!empty($conditions)) {
             $where = [];
             foreach ($conditions as $column => $placeholder) {
-                if (is_null($placeholder)) {
-                    $where[] = $column;
-                } else {
-                    $where[] = "{$column} = {$placeholder}";
-                }
+                $where[] = is_null($placeholder) ? "$column IS NULL" : "$column = $placeholder";
             }
             $sql .= ' WHERE ' . implode(' AND ', $where);
         }
 
         if (!empty($groupBy)) {
-            $sql .= ' GROUP BY ' . implode(', ', $groupBy);
+            $sql .= ' GROUP BY ' . implode(', ', array_map(fn($c) => "$c", $groupBy));
         }
 
         if (!empty($orderBy)) {
-            $orderClauses = [];
-            foreach ($orderBy as $column => $direction) {
-                $direction = strtoupper($direction) === 'DESC' ? 'DESC' : 'ASC';
-                $orderClauses[] = "{$column} {$direction}";
+            $order = [];
+            foreach ($orderBy as $col => $dir) {
+                $dir = strtoupper($dir) === 'DESC' ? 'DESC' : 'ASC';
+                $order[] = "$col $dir";
             }
-            $sql .= ' ORDER BY ' . implode(', ', $orderClauses);
+            $sql .= ' ORDER BY ' . implode(', ', $order);
         }
 
         if ($limit > 0) {
-            $sql .= " LIMIT {$limit}";
+            $sql .= " LIMIT $limit";
             if ($offset > 0) {
-                $sql .= " OFFSET {$offset}";
+                $sql .= " OFFSET $offset";
             }
         }
 
-        $stmt = self::runQuery($sql, $params);
-        return $stmt;
+        return $this->runQuery($sql, $params);
+    }
+
+    /**
+     * Simple WHERE query (convenience wrapper)
+     *
+     * @param string $table      Table name
+     * @param array  $conditions Column => value
+     * @param array  $params     Optional bound params override
+     * @param int    $limit      Optional limit
+     * @param int    $offset     Optional offset
+     * @return array             Result set
+     */
+    public function getWhere(string $table, array $conditions, array $params = [], int $limit = 0, int $offset = 0): array
+    {
+        $placeholders = [];
+        foreach ($conditions as $col => $val) {
+            $ph = ":ph_$col";
+            $placeholders[] = "`$col` = $ph";
+            $params[$ph] = $val;
+        }
+
+        $sql = "SELECT * FROM `$table`";
+        if (!empty($placeholders)) {
+            $sql .= " WHERE " . implode(' AND ', $placeholders);
+        }
+
+        if ($limit > 0) {
+            $sql .= " LIMIT $limit";
+            if ($offset > 0) {
+                $sql .= " OFFSET $offset";
+            }
+        }
+
+        return $this->runQuery($sql, $params);
+    }
+
+    /**
+     * Get all records from a table (with optional pagination)
+     *
+     * @param string $table  Table name
+     * @param int    $limit  Optional limit
+     * @param int    $offset Optional offset
+     * @return array         Result set
+     */
+    public function getAll(string $table, int $limit = 0, int $offset = 0): array
+    {
+        $sql = "SELECT * FROM `$table`";
+        if ($limit > 0) {
+            $sql .= " LIMIT $limit";
+            if ($offset > 0) {
+                $sql .= " OFFSET $offset";
+            }
+        }
+        return $this->runQuery($sql);
     }
 }
-?>

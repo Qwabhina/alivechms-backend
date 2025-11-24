@@ -1,590 +1,341 @@
 <?php
 
-/** Contribution Management Class
- * Handles contribution creation, updating, deletion, retrieval, and listing
- * Validates inputs and ensures data integrity
- * Implements error handling and transaction management
- * @package Contribution
+/**
+ * Contribution Management Class
+ *
+ * Handles all operations related to member contributions (tithes, offerings, pledges, etc.)
+ * including creation, updates, soft deletion, restoration, and comprehensive reporting.
+ *
+ * @package AliveChMS\Core
+ * @version 1.0.0
+ * @author  Benjamin Ebo Yankson
+ * @since   2025-11-21
  */
+
+declare(strict_types=1);
+
 class Contribution
 {
    /**
-    * Create a new contribution entry
-    * @param array $data Array containing contribution details: amount, date, contribution_type_id, member_id, payment_option_id, fiscal_year_id
-    * @return array Success status and contribution ID
-    * @throws Exception if validation fails or database operations fail
+    * Create a new contribution record
+    *
+    * @param array $data Contribution data
+    * @return array Success response with contribution_id
+    * @throws Exception On validation or database failure
     */
-
-
-   public static function create($data)
+   public static function create(array $data): array
    {
       $orm = new ORM();
-      $transactionStarted = false;
-      try {
-         // Validate input
-         Helpers::validateInput($data, [
-            'amount' => 'required|numeric',
-            'date' => 'required|date',
-            'contribution_type_id' => 'required|numeric',
-            'member_id' => 'required|numeric',
-            'payment_option_id' => 'required|numeric',
-            'fiscal_year_id' => 'required|numeric'
-         ]);
 
-         // Validate amount is positive
-         if ($data['amount'] <= 0) Helpers::sendFeedback('Contribution amount must be positive.', 400);
+      Helpers::validateInput($data, [
+         'amount'              => 'required|numeric',
+         'date'                => 'required|date',
+         'contribution_type_id' => 'required|numeric',
+         'member_id'           => 'required|numeric',
+         'payment_option_id'   => 'required|numeric',
+         'fiscal_year_id'      => 'required|numeric',
+         'description'         => 'max:500|nullable',
+      ]);
 
-         // Validate date format and ensure it's not in the future
-         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $data['date'])) Helpers::sendFeedback('Invalid date format (YYYY-MM-DD required).', 400);
-         // Create DateTime object to validate date
-         $dateObj = DateTime::createFromFormat('Y-m-d', $data['date']);
-         if (!$dateObj || $dateObj->format('Y-m-d') !== $data['date']) Helpers::sendFeedback('Invalid date value.', 400);
-         // Ensure date is not in the future
-         $currentDate = (new DateTime())->format('Y-m-d');
-         if ($data['date'] > $currentDate) Helpers::sendFeedback('Contribution date cannot be in the future.', 400);
+      $amount         = (float)$data['amount'];
+      $contributionDate = $data['date'];
+      $memberId       = (int)$data['member_id'];
+      $typeId         = (int)$data['contribution_type_id'];
+      $paymentId      = (int)$data['payment_option_id'];
+      $fiscalYearId   = (int)$data['fiscal_year_id'];
 
-         // Validate foreign keys in a single query
-         $validationQuery = $orm->runQuery(
-            'SELECT 
-                (SELECT COUNT(*) FROM churchmember WHERE MbrID = :member_id AND Deleted = "0") as member_exists,
-                (SELECT COUNT(*) FROM contributiontype WHERE ContributionTypeID = :contribution_type_id) as type_exists,
-                (SELECT COUNT(*) FROM paymentoption WHERE PaymentOptionID = :payment_option_id) as payment_exists,
-                (SELECT COUNT(*) FROM fiscalyear WHERE FiscalYearID = :fiscal_year_id) as fiscal_year_exists',
+      if ($amount <= 0) {
+         Helpers::sendFeedback('Contribution amount must be greater than zero', 400);
+      }
+
+      // Validate date is not in the future
+      if ($contributionDate > date('Y-m-d')) {
+         Helpers::sendFeedback('Contribution date cannot be in the future', 400);
+      }
+
+      // Validate foreign keys exist
+      $validations = $orm->runQuery(
+         "SELECT 
+                (SELECT COUNT(*) FROM churchmember WHERE MbrID = :member_id AND Deleted = 0 AND MbrMembershipStatus = 'Active') AS member_ok,
+                (SELECT COUNT(*) FROM contributiontype WHERE ContributionTypeID = :type_id) AS type_ok,
+                (SELECT COUNT(*) FROM paymentoption WHERE PaymentOptionID = :payment_id) AS payment_ok,
+                (SELECT COUNT(*) FROM fiscalyear WHERE FiscalYearID = :fiscal_id AND Status = 'Active') AS fiscal_ok",
             [
-               ':member_id' => $data['member_id'],
-               ':contribution_type_id' => $data['contribution_type_id'],
-               ':payment_option_id' => $data['payment_option_id'],
-               ':fiscal_year_id' => $data['fiscal_year_id']
+            ':member_id' => $memberId,
+            ':type_id'   => $typeId,
+            ':payment_id' => $paymentId,
+            ':fiscal_id' => $fiscalYearId
             ]
-         );
+      )[0];
 
-         if ($validationQuery[0]['member_exists'] == 0) Helpers::sendFeedback('Invalid Member ID: Member does not exist or is deleted.', 400);
-         if ($validationQuery[0]['type_exists'] == 0) Helpers::sendFeedback('Invalid Contribution Type ID.', 400);
-         if ($validationQuery[0]['payment_exists'] == 0) Helpers::sendFeedback('Invalid Payment Option ID.', 400);
-         if ($validationQuery[0]['fiscal_year_exists'] == 0) Helpers::sendFeedback('Invalid Fiscal Year ID.', 400);
+      if ($validations['member_ok'] == 0) Helpers::sendFeedback('Invalid or inactive member', 400);
+      if ($validations['type_ok'] == 0)   Helpers::sendFeedback('Invalid contribution type', 400);
+      if ($validations['payment_ok'] == 0) Helpers::sendFeedback('Invalid payment option', 400);
+      if ($validations['fiscal_ok'] == 0)  Helpers::sendFeedback('Invalid or inactive fiscal year', 400);
 
-         $orm->beginTransaction();
-         $transactionStarted = true;
-
-         // Insert contribution
+      $orm->beginTransaction();
+      try {
          $contributionId = $orm->insert('contribution', [
-            'ContributionAmount' => $data['amount'],
-            'ContributionDate' => $data['date'],
-            'ContributionTypeID' => $data['contribution_type_id'],
-            'PaymentOptionID' => $data['payment_option_id'],
-            'MbrID' => $data['member_id'],
-            'FiscalYearID' => $data['fiscal_year_id'],
-            'Deleted' => '0'
+            'ContributionAmount'   => $amount,
+            'ContributionDate'     => $contributionDate,
+            'ContributionTypeID'   => $typeId,
+            'PaymentOptionID'      => $paymentId,
+            'MbrID'                => $memberId,
+            'FiscalYearID'         => $fiscalYearId,
+            'Description'          => $data['description'] ?? null,
+            'Deleted'              => 0,
+            'RecordedBy'           => Auth::getCurrentUserId($token ?? ''),
+            'RecordedAt'           => date('Y-m-d H:i:s')
          ])['id'];
 
-         // Create notifications for admins with view_contributions permission
-         // $adminUsers = $orm->runQuery(
-         //    'SELECT DISTINCT u.MbrID
-         //     FROM userauthentication u
-         //     INNER JOIN memberrole mr ON u.MbrID = mr.MbrID
-         //     INNER JOIN churchrole cr ON mr.ChurchRoleID = cr.RoleID
-         //     INNER JOIN rolepermission rp ON cr.RoleID = rp.ChurchRoleID
-         //     INNER JOIN permission p ON rp.PermissionID = p.PermissionID
-         //     WHERE p.PermissionName = :permission',
-         //    [':permission' => 'view_contributions']
-         // );
-
-         // foreach ($adminUsers as $admin) {
-         //    $orm->insert('communication', [
-         //       'Title' => 'New Contribution Submitted',
-         //       'Message' => "Contribution of {$data['amount']} submitted by member ID {$data['member_id']} on {$data['date']}.",
-         //       'SentBy' => $data['member_id'],
-         //       'TargetGroupID' => null
-         //    ]);
-         // }
-
          $orm->commit();
+
+         Helpers::logError("New contribution recorded: ID $contributionId | Amount $amount | Member $memberId");
+
          return ['status' => 'success', 'contribution_id' => $contributionId];
       } catch (Exception $e) {
-         if ($transactionStarted && $orm->inTransaction()) $orm->rollBack();
-
-         $errorMessage = 'Failed to create contribution: ' . $e->getMessage();
-         if (strpos($e->getMessage(), 'SQLSTATE[23000]') !== false) $errorMessage = 'Database constraint violation';
-
-         Helpers::logError('Contribution create error: ' . $e->getMessage());
-         Helpers::sendFeedback($errorMessage, 400);
+         $orm->rollBack();
+         Helpers::logError("Contribution creation failed: " . $e->getMessage());
+         throw $e;
       }
    }
 
    /**
-    * Update an existing contribution entry
-    * @param int $contributionId The ID of the contribution to update
-    * @param array $data Array containing fields to update: amount, date, contribution_type_id, payment_option_id, fiscal_year_id
-    * @return array Success status and contribution ID
-    * @throws Exception if validation fails or database operations fail
+    * Update an existing contribution
+    *
+    * @param int   $contributionId Contribution ID
+    * @param array $data           Updated data
+    * @return array Success response
     */
-   public static function update($contributionId, $data)
+   public static function update(int $contributionId, array $data): array
    {
       $orm = new ORM();
-      try {
-         // Validate input
-         Helpers::validateInput($data, [
-            'amount' => 'required|numeric',
-            'date' => 'required|date',
-            'contribution_type_id' => 'required|numeric',
-            'payment_option_id' => 'required|numeric',
-            'fiscal_year_id' => 'required|numeric'
-         ]);
 
-         // Validate amount is positive
-         if ($data['amount'] <= 0) Helpers::sendFeedback('Contribution amount must be positive.', 400);
-         // Validate date format and ensure it's not in the future
-         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $data['date'])) Helpers::sendFeedback('Invalid date format (YYYY-MM-DD required).', 400);
+      $existing = $orm->getWhere('contribution', ['ContributionID' => $contributionId, 'Deleted' => 0]);
+      if (empty($existing)) {
+         Helpers::sendFeedback('Contribution not found or deleted', 404);
+      }
 
-         $dateObj = DateTime::createFromFormat('Y-m-d', $data['date']);
-         if (!$dateObj || $dateObj->format('Y-m-d') !== $data['date']) Helpers::sendFeedback('Invalid date value.', 400);
+      Helpers::validateInput($data, [
+         'amount'              => 'numeric|nullable',
+         'date'                => 'date|nullable',
+         'contribution_type_id' => 'numeric|nullable',
+         'payment_option_id'   => 'numeric|nullable',
+         'description'         => 'max:500|nullable',
+      ]);
 
-         $currentDate = (new DateTime())->format('Y-m-d');
-         if ($data['date'] > $currentDate) Helpers::sendFeedback('Contribution date cannot be in the future.', 400);
-
-         // Validate contribution exists and is not soft-deleted
-         $contribution = $orm->getWhere('contribution', ['ContributionID' => $contributionId, 'Deleted' => '0']);
-         if (empty($contribution)) Helpers::sendFeedback('Contribution not found or has been deleted.', 400);
-
-         // Validate foreign keys in a single query
-         $validationQuery = $orm->runQuery(
-            'SELECT 
-                (SELECT COUNT(*) FROM contributiontype WHERE ContributionTypeID = :contribution_type_id) as type_exists,
-                (SELECT COUNT(*) FROM churchmember WHERE MbrID = :member_id) as member_exists,
-                (SELECT COUNT(*) FROM paymentoption WHERE PaymentOptionID = :payment_option_id) as payment_exists,
-                (SELECT COUNT(*) FROM fiscalyear WHERE FiscalYearID = :fiscal_year_id) as fiscal_year_exists',
-            [
-               ':contribution_type_id' => $data['contribution_type_id'],
-               ':payment_option_id' => $data['payment_option_id'],
-               ':member_id' => $data['member_id'],
-               ':fiscal_year_id' => $data['fiscal_year_id']
-            ]
-         );
-
-         if ($validationQuery[0]['type_exists'] == 0) Helpers::sendFeedback('Invalid Contribution Type ID.', 400);
-         if ($validationQuery[0]['payment_exists'] == 0) Helpers::sendFeedback('Invalid Payment Option ID.', 400);
-         if ($validationQuery[0]['member_exists'] == 0) Helpers::sendFeedback('Member Not Found.', 400);
-         if ($validationQuery[0]['fiscal_year_exists'] == 0) Helpers::sendFeedback('Invalid Fiscal Year ID.', 400);
-
-         $orm->beginTransaction();
-
-         // Update contribution
-         $orm->update('contribution', [
-            'ContributionAmount' => $data['amount'],
-            'ContributionDate' => $data['date'],
-            'MbrID' => $data['member_id'],
-            'ContributionTypeID' => $data['contribution_type_id'],
-            'PaymentOptionID' => $data['payment_option_id'],
-            'FiscalYearID' => $data['fiscal_year_id']
-         ], ['ContributionID' => $contributionId]);
-
-         $orm->commit();
-         return ['status' => 'success', 'contribution_id' => $contributionId];
-      } catch (Exception $e) {
-         if ($orm->inTransaction()) {
-            $orm->rollBack();
+      $update = [];
+      if (isset($data['amount']) && (float)$data['amount'] > 0) {
+         $update['ContributionAmount'] = (float)$data['amount'];
+      }
+      if (!empty($data['date'])) {
+         if ($data['date'] > date('Y-m-d')) {
+            Helpers::sendFeedback('Date cannot be in the future', 400);
          }
-         $errorMessage = 'Failed to update contribution: ' . $e->getMessage();
-         if (strpos($e->getMessage(), 'SQLSTATE[23000]') !== false) {
-            $errorMessage = 'Database constraint violation (e.g., invalid foreign key).';
-         }
-         Helpers::logError('Contribution update error: ' . $e->getMessage());
-         Helpers::sendFeedback($errorMessage, 400);
+         $update['ContributionDate'] = $data['date'];
       }
+      if (!empty($data['contribution_type_id'])) {
+         $update['ContributionTypeID'] = (int)$data['contribution_type_id'];
+      }
+      if (!empty($data['payment_option_id'])) {
+         $update['PaymentOptionID'] = (int)$data['payment_option_id'];
+      }
+      if (isset($data['description'])) {
+         $update['Description'] = $data['description'];
+      }
+
+      if (!empty($update)) {
+         $orm->update('contribution', $update, ['ContributionID' => $contributionId]);
+      }
+
+      return ['status' => 'success', 'contribution_id' => $contributionId];
    }
 
    /**
-    * Delete a contribution entry
-    * @param int $contributionId The ID of the contribution to delete
-    * @return array Result of the operation
-    * @throws Exception if validation fails or database operations fail
+    * Soft delete a contribution
+    *
+    * @param int $contributionId Contribution ID
+    * @return array Success response
     */
-   public static function delete($contributionId)
+   public static function delete(int $contributionId): array
    {
       $orm = new ORM();
-      try {
-         // Validate contribution exists and is not already soft-deleted
-         $contribution = $orm->getWhere('contribution', ['ContributionID' => $contributionId, 'Deleted' => 0]);
-         if (empty($contribution)) Helpers::sendFeedback('Contribution not found or already deleted.');
 
-         $orm->beginTransaction();
-         $orm->update('contribution', ['Deleted' => 1], ['ContributionID' => $contributionId]);
-         $orm->commit();
-
-         return ['status' => 'success'];
-      } catch (Exception $e) {
-         if ($orm->inTransaction())  $orm->rollBack();
-
-         Helpers::logError('Contribution soft delete error: ' . $e->getMessage());
-         Helpers::sendFeedback('Contribution soft delete failed: ' . $e->getMessage());
+      $affected = $orm->update('contribution', ['Deleted' => 1], ['ContributionID' => $contributionId, 'Deleted' => 0]);
+      if ($affected === 0) {
+         Helpers::sendFeedback('Contribution not found or already deleted', 404);
       }
+
+      return ['status' => 'success'];
    }
 
    /**
-    * Restore a soft-deleted contribution entry
-    * @param int $contributionId The ID of the contribution to restore
-    * @return array Result of the operation
-    * @throws Exception if validation fails or database operations fail
+    * Restore a soft-deleted contribution
+    *
+    * @param int $contributionId Contribution ID
+    * @return array Success response
     */
-   public static function restore($contributionId)
+   public static function restore(int $contributionId): array
    {
       $orm = new ORM();
-      try {
-         $contribution = $orm->getWhere('contribution', ['ContributionID' => $contributionId, 'Deleted' => 1]);
-         if (empty($contribution)) Helpers::sendFeedback('Contribution not found or not deleted.');
 
-         $orm->beginTransaction();
-         $orm->update('contribution', ['Deleted' => 0], ['ContributionID' => $contributionId]);
-         $orm->commit();
-
-         return ['status' => 'success'];
-      } catch (Exception $e) {
-         if ($orm->inTransaction()) $orm->rollBack();
-
-         Helpers::logError('Contribution restore error: ' . $e->getMessage());
-         Helpers::sendFeedback('Contribution restore failed: ' . $e->getMessage());
+      $affected = $orm->update('contribution', ['Deleted' => 0], ['ContributionID' => $contributionId, 'Deleted' => 1]);
+      if ($affected === 0) {
+         Helpers::sendFeedback('Contribution not found or not deleted', 404);
       }
+
+      return ['status' => 'success'];
    }
 
    /**
-    * Get a single contribution entry by ID
-    * @param int $contributionId The ID of the contribution to retrieve
-    * @return array|null The contribution data or null if not found
-    * @throws Exception if database operations fail
+    * Retrieve a single contribution with related data
+    *
+    * @param int $contributionId Contribution ID
+    * @return array Contribution details
     */
-   public static function get($contributionId)
+   public static function get(int $contributionId): array
    {
       $orm = new ORM();
-      try {
-         $contribution = $orm->selectWithJoin(
+
+      $contributions = $orm->selectWithJoin(
             baseTable: 'contribution c',
             joins: [
-               ['table' => 'churchmember m', 'on' => 'c.MbrID = m.MbrID', 'type' => 'LEFT'],
-               ['table' => 'contributiontype ct', 'on' => 'c.ContributionTypeID = ct.ContributionTypeID', 'type' => 'LEFT'],
-               ['table' => 'paymentoption p', 'on' => 'c.PaymentOptionID = p.PaymentOptionID', 'type' => 'LEFT']
+            ['table' => 'churchmember m', 'on' => 'c.MbrID = m.MbrID'],
+            ['table' => 'contributiontype ct', 'on' => 'c.ContributionTypeID = ct.ContributionTypeID'],
+            ['table' => 'paymentoption p', 'on' => 'c.PaymentOptionID = p.PaymentOptionID']
             ],
             fields: [
-               'c.ContributionID',
-               'c.ContributionAmount',
-               'c.ContributionDate',
-               'CONCAT(m.MbrFirstName," ", m.MbrFamilyName) AS ContributorName',
-               'ct.*',
-               'p.*',
+            'c.*',
+            'm.MbrFirstName',
+            'm.MbrFamilyName',
+            'ct.ContributionTypeName',
+            'p.PaymentOptionName'
             ],
-            conditions: ['c.ContributionID' => ':id', 'c.Deleted' => ':deleted'],
-            params: [':id' => $contributionId, ':deleted' => 0]
-         )[0] ?? null;
+         conditions: ['c.ContributionID' => ':id', 'c.Deleted' => 0],
+         params: [':id' => $contributionId]
+      );
 
-         if (!$contribution) Helpers::sendFeedback('Contribution not found');
-
-         return $contribution;
-      } catch (Exception $e) {
-         Helpers::logError('Contribution get error: ' . $e->getMessage());
-         Helpers::sendFeedback('Contribution get error: ' . $e->getMessage());
-         // Helpers::sendFeedback('Contribution retrieval error.');
+      if (empty($contributions)) {
+         Helpers::sendFeedback('Contribution not found', 404);
       }
+
+      return $contributions[0];
    }
 
    /**
-    * Get all contributions with pagination and optional filters
-    * @param int $page Page number for pagination
-    * @param int $limit Number of records per page
-    * @param array $filters Optional filters for contribution type or date range
-    * @return array List of contributions with pagination info
-    * @throws Exception if database operations fail
+    * Retrieve paginated contributions with filters
+    *
+    * @param int   $page    Page number
+    * @param int   $limit   Items per page
+    * @param array $filters Optional filters
+    * @return array Paginated result
     */
-   public static function getAll($page = 1, $limit = 10, $filters = [])
+   public static function getAll(int $page = 1, int $limit = 10, array $filters = []): array
    {
       $orm = new ORM();
-      try {
-         $offset = ($page - 1) * $limit;
-         $conditions = [];
-         $params = [];
+      $offset = ($page - 1) * $limit;
 
-         // Apply filters
-         if (!empty($filters['contribution_type']) && is_numeric($filters['contribution_type'])) {
-            $conditions[] = ['column' => 'c.ContributionTypeID', 'operator' => '=', 'placeholder' => ':contribution_type'];
-            $params[':contribution_type'] = $filters['contribution_type'];
-         }
-         if (!empty($filters['start_date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['start_date'])) {
-            $date = DateTime::createFromFormat('Y-m-d', $filters['start_date']);
+      $conditions = ['c.Deleted' => 0];
+      $params = [];
 
-            if ($date && $date->format('Y-m-d') === $filters['start_date']) {
-               $conditions[] = ['column' => 'c.ContributionDate', 'operator' => '>=', 'placeholder' => ':start_date'];
-               $params[':start_date'] = $filters['start_date'];
-            } else {
-               Helpers::sendFeedback('Invalid start_date format.');
-            }
-         }
-         if (!empty($filters['end_date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['end_date'])) {
-            $date = DateTime::createFromFormat('Y-m-d', $filters['end_date']);
+      if (!empty($filters['contribution_type_id'])) {
+         $conditions['c.ContributionTypeID'] = ':type_id';
+         $params[':type_id'] = (int)$filters['contribution_type_id'];
+      }
+      if (!empty($filters['member_id'])) {
+         $conditions['c.MbrID'] = ':member_id';
+         $params[':member_id'] = (int)$filters['member_id'];
+      }
+      if (!empty($filters['fiscal_year_id'])) {
+         $conditions['c.FiscalYearID'] = ':fy_id';
+         $params[':fy_id'] = (int)$filters['fiscal_year_id'];
+      }
+      if (!empty($filters['start_date'])) {
+         $conditions['c.ContributionDate >='] = ':start';
+         $params[':start'] = $filters['start_date'];
+      }
+      if (!empty($filters['end_date'])) {
+         $conditions['c.ContributionDate <='] = ':end';
+         $params[':end'] = $filters['end_date'];
+      }
 
-            if ($date && $date->format('Y-m-d') === $filters['end_date']) {
-               $conditions[] = ['column' => 'c.ContributionDate', 'operator' => '<=', 'placeholder' => ':end_date'];
-               $params[':end_date'] = $filters['end_date'];
-            } else {
-               Helpers::sendFeedback('Invalid end_date format.');
-            }
-         }
-         if (!empty($filters['fiscal_year']) && is_numeric($filters['fiscal_year'])) {
-            $conditions[] = ['column' => 'c.FiscalYearID', 'operator' => '=', 'placeholder' => ':fiscal_year'];
-            $params[':fiscal_year'] = $filters['fiscal_year'];
-         }
-         if (!empty($filters['payment_option']) && is_numeric($filters['payment_option'])) {
-            $conditions[] = ['column' => 'c.PaymentOptionID', 'operator' => '=', 'placeholder' => ':payment_option'];
-            $params[':payment_option'] = $filters['payment_option'];
-         }
+      $contributions = $orm->selectWithJoin(
+         baseTable: 'contribution c',
+         joins: [
+            ['table' => 'churchmember m', 'on' => 'c.MbrID = m.MbrID'],
+            ['table' => 'contributiontype ct', 'on' => 'c.ContributionTypeID = ct.ContributionTypeID'],
+            ['table' => 'paymentoption p', 'on' => 'c.PaymentOptionID = p.PaymentOptionID']
+         ],
+         fields: [
+            'c.ContributionID',
+            'c.ContributionAmount',
+            'c.ContributionDate',
+            'c.Description',
+            'm.MbrFirstName',
+            'm.MbrFamilyName',
+            'ct.ContributionTypeName',
+            'p.PaymentOptionName'
+         ],
+         conditions: $conditions,
+         params: $params,
+         orderBy: ['c.ContributionDate' => 'DESC'],
+         limit: $limit,
+         offset: $offset
+      );
 
-         // Validate date range against fiscal year if both are provided
-         if (!empty($filters['fiscal_year']) && !empty($filters['start_date']) && !empty($filters['end_date'])) {
-            $fiscalYearData = $orm->getWhere('fiscalyear', ['FiscalYearID' => $filters['fiscal_year']]);
+      $total = $orm->runQuery(
+         "SELECT COUNT(*) AS total FROM contribution c WHERE c.Deleted = 0" .
+            (!empty($conditions) ? ' AND ' . implode(' AND ', array_keys(array_diff_key($conditions, ['c.Deleted' => 0]))) : ''),
+         array_diff_key($params, [':deleted' => 0])
+      )[0]['total'];
 
-            if (empty($fiscalYearData)) Helpers::sendFeedback('Invalid FiscalYearID: No fiscal year found.');
-
-            $fiscalStart = $fiscalYearData[0]['FiscalYearStartDate'];
-            $fiscalEnd = $fiscalYearData[0]['FiscalYearEndDate'];
-
-            if ($filters['start_date'] < $fiscalStart || $filters['end_date'] > $fiscalEnd) Helpers::sendFeedback("Date range must be within fiscal year boundaries ($fiscalStart to $fiscalEnd).");
-         }
-
-         // Add deleted condition
-         $conditions[] = ['column' => 'c.Deleted', 'operator' => '=', 'placeholder' => ':deleted'];
-         $params[':deleted'] = 0;
-
-         // Construct WHERE clause
-         $whereClauses = [];
-         foreach ($conditions as $condition) $whereClauses[] = "{$condition['column']} {$condition['operator']} {$condition['placeholder']}";
-
-         $whereSql = !empty($whereClauses) ? ' WHERE ' . implode(' AND ', $whereClauses) : '';
-
-         // Main query
-         $sql = "SELECT c.ContributionID, c.ContributionAmount, c.ContributionDate, 
-                CONCAT(m.MbrFirstName, ' ', m.MbrFamilyName) AS ContributorName, 
-                ct.*, p.*
-                FROM contribution c
-                LEFT JOIN churchmember m ON c.MbrID = m.MbrID
-                LEFT JOIN contributiontype ct ON c.ContributionTypeID = ct.ContributionTypeID
-                LEFT JOIN paymentoption p ON c.PaymentOptionID = p.PaymentOptionID"
-            . $whereSql;
-
-         if ($limit > 0) {
-            $sql .= " LIMIT {$limit}";
-            if ($offset > 0) $sql .= " OFFSET {$offset}";
-         }
-
-         $contributions = $orm->runQuery($sql, $params);
-
-         // Total count query
-         $total = $orm->runQuery("SELECT COUNT(*) as total FROM contribution c" . $whereSql, $params)[0]['total'];
-
-         return [
+      return [
             'data' => $contributions,
             'pagination' => [
-               'page' => $page,
-               'limit' => $limit,
-               'total' => $total,
-               'pages' => ceil($total / $limit)
+            'page'  => $page,
+            'limit' => $limit,
+            'total' => (int)$total,
+            'pages' => (int)ceil($total / $limit)
             ]
-         ];
-      } catch (Exception $e) {
-         Helpers::logError('Contribution getAll error: ' . $e->getMessage());
-         Helpers::sendFeedback('Failed to retrieve contributions: ' . $e->getMessage());
-      }
+      ];
    }
 
    /**
-    * Get the average contribution amount based on filters
-    * @param array $filters Filters for contribution type, payment option, fiscal year, and date range
-    * @return array Average contribution amount
-    * @throws Exception if validation fails or database operations fail
+    * Get total contributions with filters
+    *
+    * @param array $filters Filters
+    * @return array Total amount
     */
-   public static function getAverage(array $filters = [])
+   public static function getTotal(array $filters = []): array
    {
       $orm = new ORM();
-      try {
-         // Ensure at least one of start_date, end_date, or fiscal_year is provided
-         if (empty($filters['start_date']) && empty($filters['end_date']) && empty($filters['fiscal_year'])) Helpers::sendFeedback('At least one of start_date, end_date, or fiscal_year is required.', 400);
+      $conditions = ['c.Deleted' => 0];
+      $params = [];
 
-         // Validate date formats and values
-         if (!empty($filters['start_date'])) {
-            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['start_date']))  Helpers::sendFeedback('Invalid start_date format (YYYY-MM-DD required).', 400);
-
-            $startDateObj = DateTime::createFromFormat('Y-m-d', $filters['start_date']);
-            if (!$startDateObj || $startDateObj->format('Y-m-d') !== $filters['start_date']) Helpers::sendFeedback('Invalid start_date value.', 400);
-         }
-
-         // Validate end_date format and ensure it's not in the future
-         if (!empty($filters['end_date'])) {
-            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['end_date'])) Helpers::sendFeedback('Invalid end_date format (YYYY-MM-DD required).', 400);
-
-            $endDateObj = DateTime::createFromFormat('Y-m-d', $filters['end_date']);
-            if (!$endDateObj || $endDateObj->format('Y-m-d') !== $filters['end_date']) Helpers::sendFeedback('Invalid end_date value.', 400);
-         }
-
-         // Ensure start_date is before end_date
-         if (!empty($filters['start_date']) && !empty($filters['end_date']) && $filters['start_date'] > $filters['end_date']) Helpers::sendFeedback('start_date cannot be after end_date.', 400);
-
-         // Validate fiscal year and date range compatibility
-         if (!empty($filters['fiscal_year'])) {
-            if (!is_numeric($filters['fiscal_year'])) Helpers::sendFeedback('Invalid fiscal_year: Must be numeric.', 400);
-
-            if (!empty($filters['start_date']) && !empty($filters['end_date'])) {
-               $fiscalYearData = $orm->runQuery('SELECT StartDate, EndDate FROM fiscalyear WHERE FiscalYearID = :fiscal_year', [':fiscal_year' => $filters['fiscal_year']]);
-               if (empty($fiscalYearData)) Helpers::sendFeedback('Invalid fiscal_year: No fiscal year found.', 400);
-
-               $fiscalStart = $fiscalYearData[0]['StartDate'];
-               $fiscalEnd = $fiscalYearData[0]['EndDate'];
-               if ($filters['start_date'] < $fiscalStart || $filters['end_date'] > $fiscalEnd) Helpers::sendFeedback("Date range must be within fiscal year boundaries ($fiscalStart to $fiscalEnd).", 400);
-            }
-         }
-
-         // Validate payment_option and contribution_type
-         if (!empty($filters['payment_option']) && !is_numeric($filters['payment_option'])) Helpers::sendFeedback('Invalid payment_option', 400);
-         if (!empty($filters['contribution_type']) && !is_numeric($filters['contribution_type'])) Helpers::sendFeedback('Invalid contribution_type', 400);
-
-         // Build WHERE clause
-         $conditions = [];
-         $params = [];
-         if (!empty($filters['start_date'])) {
-            $conditions[] = 'ContributionDate >= :start_date';
-            $params[':start_date'] = $filters['start_date'];
-         }
-         if (!empty($filters['end_date'])) {
-            $conditions[] = 'ContributionDate <= :end_date';
-            $params[':end_date'] = $filters['end_date'];
-         }
-         if (!empty($filters['fiscal_year'])) {
-            $conditions[] = 'FiscalYearID = :fiscal_year';
-            $params[':fiscal_year'] = $filters['fiscal_year'];
-         }
-         if (!empty($filters['payment_option'])) {
-            $conditions[] = 'PaymentOptionID = :payment_option';
-            $params[':payment_option'] = $filters['payment_option'];
-         }
-         if (!empty($filters['contribution_type'])) {
-            $conditions[] = 'ContributionTypeID = :contribution_type';
-            $params[':contribution_type'] = $filters['contribution_type'];
-         }
-         if (!empty($filters['contributor_id'])) {
-            $conditions[] = 'MbrID = :contributor_id';
-            $params[':contributor_id'] = $filters['contributor_id'];
-         }
-         $conditions[] = 'Deleted = :deleted';
-         $params[':deleted'] = 0;
-
-         $whereSql = !empty($conditions) ? ' WHERE ' . implode(' AND ', $conditions) : '';
-
-         // Query to get single average
-         $results = $orm->runQuery(
-            'SELECT AVG(ContributionAmount) as average_contribution
-             FROM contribution'
-               . $whereSql,
-            $params
-         );
-
-         // Format the result
-         $average = !empty($results[0]['average_contribution']) ? (float)$results[0]['average_contribution'] : 0;
-         return ['average_contribution' => number_format($average, 2)];
-      } catch (Exception $e) {
-         Helpers::logError('Contribution average error: ' . $e->getMessage());
-         Helpers::sendFeedback('Failed to retrieve average contribution: ' . $e->getMessage(), 400);
+      // Apply same filters as getAll
+      if (!empty($filters['contribution_type_id'])) {
+         $conditions['c.ContributionTypeID'] = ':type_id';
+         $params[':type_id'] = (int)$filters['contribution_type_id'];
       }
-   }
-
-   /**
-    * Get the total contribution amount based on filters
-    * @param array $filters Filters for contribution type, payment option, fiscal year, and date range
-    * @return array Total contribution amount
-    * @throws Exception if validation fails or database operations fail
-    */
-   public static function getTotal(array $filters = [])
-   {
-      $orm = new ORM();
-      try {
-         // Ensure at least one of start_date, end_date, or fiscal_year is provided
-         if (empty($filters['start_date']) && empty($filters['end_date']) && empty($filters['fiscal_year'])) Helpers::sendFeedback('At least one of start_date, end_date, or fiscal_year is required.', 400);
-
-         // Validate date formats and values
-         if (!empty($filters['start_date'])) {
-            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['start_date'])) Helpers::sendFeedback('Invalid start_date format (YYYY-MM-DD required).', 400);
-
-            $startDateObj = DateTime::createFromFormat('Y-m-d', $filters['start_date']);
-            if (!$startDateObj || $startDateObj->format('Y-m-d') !== $filters['start_date']) Helpers::sendFeedback('Invalid start_date value.', 400);
-         }
-
-         if (!empty($filters['end_date'])) {
-            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['end_date'])) Helpers::sendFeedback('Invalid end_date format (YYYY-MM-DD required).', 400);
-
-            $endDateObj = DateTime::createFromFormat('Y-m-d', $filters['end_date']);
-            if (!$endDateObj || $endDateObj->format('Y-m-d') !== $filters['end_date']) Helpers::sendFeedback('Invalid end_date value.', 400);
-         }
-         if (!empty($filters['start_date']) && !empty($filters['end_date']) && $filters['start_date'] > $filters['end_date']) Helpers::sendFeedback('start_date cannot be after end_date.', 400);
-
-         // Validate fiscal year and date range compatibility
-         if (!empty($filters['fiscal_year'])) {
-            if (!is_numeric($filters['fiscal_year'])) Helpers::sendFeedback('Invalid fiscal_year: Must be numeric.', 400);
-
-            if (!empty($filters['start_date']) && !empty($filters['end_date'])) {
-               $fiscalYearData = $orm->runQuery('SELECT StartDate, EndDate FROM fiscalyear WHERE FiscalYearID = :fiscal_year', [':fiscal_year' => $filters['fiscal_year']]);
-               if (empty($fiscalYearData)) Helpers::sendFeedback('Invalid fiscal_year: No fiscal year found.', 400);
-
-               $fiscalStart = $fiscalYearData[0]['StartDate'];
-               $fiscalEnd = $fiscalYearData[0]['EndDate'];
-               if ($filters['start_date'] < $fiscalStart || $filters['end_date'] > $fiscalEnd) Helpers::sendFeedback("Date range must be within fiscal year boundaries ($fiscalStart to $fiscalEnd).", 400);
-            }
-         }
-
-         // Validate payment_option, contribution_type, and contributor_id
-         if (!empty($filters['payment_option']) && !is_numeric($filters['payment_option'])) Helpers::sendFeedback('Invalid payment_option', 400);
-         if (!empty($filters['contribution_type']) && !is_numeric($filters['contribution_type'])) Helpers::sendFeedback('Invalid contribution_type: Must be numeric.', 400);
-         if (!empty($filters['contributor_id']) && !is_numeric($filters['contributor_id'])) Helpers::sendFeedback('Invalid contributor_id: Must be numeric.', 400);
-
-         // Build WHERE clause
-         $conditions = [];
-         $params = [];
-         if (!empty($filters['start_date'])) {
-            $conditions[] = 'ContributionDate >= :start_date';
-            $params[':start_date'] = $filters['start_date'];
-         }
-         if (!empty($filters['end_date'])) {
-            $conditions[] = 'ContributionDate <= :end_date';
-            $params[':end_date'] = $filters['end_date'];
-         }
-         if (!empty($filters['fiscal_year'])) {
-            $conditions[] = 'FiscalYearID = :fiscal_year';
-            $params[':fiscal_year'] = $filters['fiscal_year'];
-         }
-         if (!empty($filters['payment_option'])) {
-            $conditions[] = 'PaymentOptionID = :payment_option';
-            $params[':payment_option'] = $filters['payment_option'];
-         }
-         if (!empty($filters['contribution_type'])) {
-            $conditions[] = 'ContributionTypeID = :contribution_type';
-            $params[':contribution_type'] = $filters['contribution_type'];
-         }
-         if (!empty($filters['contributor_id'])) {
-            $conditions[] = 'MbrID = :contributor_id';
-            $params[':contributor_id'] = $filters['contributor_id'];
-         }
-         $conditions[] = 'Deleted = :deleted';
-         $params[':deleted'] = 0;
-
-         $whereSql = !empty($conditions) ? ' WHERE ' . implode(' AND ', $conditions) : '';
-
-         // Query to get total contribution
-         $results = $orm->runQuery(
-            'SELECT SUM(ContributionAmount) as total_contribution
-             FROM contribution'
-               . $whereSql,
-            $params
-         );
-
-         // Format the result
-         $total = !empty($results[0]['total_contribution']) ? (float)$results[0]['total_contribution'] : 0;
-         return ['total_contribution' => number_format($total, 2)];
-      } catch (Exception $e) {
-         Helpers::logError('Contribution total error: ' . $e->getMessage());
-         Helpers::sendFeedback('Failed to retrieve total contribution: ' . $e->getMessage(), 400);
+      if (!empty($filters['fiscal_year_id'])) {
+         $conditions['c.FiscalYearID'] = ':fy_id';
+         $params[':fy_id'] = (int)$filters['fiscal_year_id'];
       }
+      if (!empty($filters['start_date'])) {
+         $conditions['c.ContributionDate >='] = ':start';
+         $params[':start'] = $filters['start_date'];
+      }
+      if (!empty($filters['end_date'])) {
+         $conditions['c.ContributionDate <='] = ':end';
+         $params[':end'] = $filters['end_date'];
+      }
+
+      $result = $orm->runQuery(
+         "SELECT COALESCE(SUM(c.ContributionAmount), 0) AS total FROM contribution c" .
+            (!empty($conditions) ? ' WHERE ' . implode(' AND ', array_keys($conditions)) : ''),
+            $params
+      )[0];
+
+      return ['total_contribution' => number_format((float)$result['total'], 2)];
    }
 }

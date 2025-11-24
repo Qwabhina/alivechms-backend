@@ -1,57 +1,63 @@
 <?php
 
 /**
- * Auth API Routes
- * This file handles authentication-related API routes for the AliveChMS backend.
- * It provides endpoints for user login, token refresh, and logout.
- * Requires POST requests for login and refresh, and a valid Bearer token for logout.
+ * Authentication API Routes
+ *
+ * Handles login, token refresh, and logout.
+ * All responses are standardized JSON.
+ *
+ * @package AliveChMS\Routes
+ * @version 1.0.0
+ * @author  Benjamin Ebo Yankson
+ * @since   2025-11-20
  */
 
-
-if ($_SERVER["REQUEST_METHOD"] !== 'POST') Helpers::sendFeedback('Request Malformed', 405);
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    Helpers::sendFeedback('Method not allowed', 405);
+}
 
 switch ($path) {
+
     case 'auth/login':
-        $input = json_decode(file_get_contents("php://input"), true);
-        $output = Auth::login($input['userid'], $input['passkey']);
-        echo json_encode($output);
+        $input = json_decode(file_get_contents('php://input'), true);
+        if (!$input || empty($input['userid']) || empty($input['passkey'])) {
+            Helpers::sendFeedback('Username and password required', 400);
+        }
+        try {
+            $result = Auth::login($input['userid'], $input['passkey']);
+            echo json_encode($result);
+        } catch (Exception $e) {
+            Helpers::sendFeedback('Login failed', 401);
+        }
         break;
 
     case 'auth/refresh':
-        $data = json_decode(file_get_contents('php://input'), true);
-        $refreshToken = $data['refresh_token'] ?? '';
-
-        if (empty($refreshToken)) Helpers::sendFeedback('Refresh token required', 401);
-
+        $input = json_decode(file_get_contents('php://input'), true);
+        $refreshToken = $input['refresh_token'] ?? '';
+        if (empty($refreshToken)) {
+            Helpers::sendFeedback('Refresh token required', 400);
+        }
         try {
             $result = Auth::refreshAccessToken($refreshToken);
             echo json_encode($result);
         } catch (Exception $e) {
-            Helpers::sendFeedback('Refresh token required', 401);
-            Helpers::logError($e->getMessage());
+            Helpers::sendFeedback('Invalid or expired refresh token', 401);
         }
         break;
 
     case 'auth/logout':
-        $token = Auth::getBearerToken();
-        if (!$token || !($decoded = Auth::verify($token))) {
-            http_response_code(401);
-            echo json_encode(['error' => 'Unauthorized']);
-            exit;
+        $input = json_decode(file_get_contents('php://input'), true);
+        $refreshToken = $input['refresh_token'] ?? '';
+        if (empty($refreshToken)) {
+            Helpers::sendFeedback('Refresh token required', 400);
         }
-
         try {
-            $orm = new ORM();
-            $orm->update('refresh_tokens', ['revoked' => 1], ['user_id' => $decoded['user_id'], 'revoked' => 0]);
-            echo json_encode(['message' => 'Logged out successfully']);
+            Auth::logout($refreshToken);
         } catch (Exception $e) {
-            error_log('Auth: Logout failed: ' . $e->getMessage());
-            http_response_code(500);
-            echo json_encode(['error' => 'Failed to log out']);
+            Helpers::sendFeedback('Logout failed', 500);
         }
         break;
 
     default:
         Helpers::sendFeedback('Endpoint not found', 404);
-        break;
 }

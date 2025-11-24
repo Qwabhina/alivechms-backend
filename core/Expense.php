@@ -1,415 +1,294 @@
 <?php
 
-/** Expense Management Class
- * Handles expense creation, updating, deletion, retrieval, and listing
- * Validates inputs and ensures data integrity
- * Implements error handling and transaction management
- * @package Expense
+/**
+ * Expense Management Class – Full Featured
+ *
+ * Complete expense lifecycle with approval workflow, categories,
+ * fiscal year integration, and audit trail.
+ *
+ * @package AliveChMS\Core
+ * @version 1.0.0
+ * @author  Benjamin Ebo Yankson
+ * @since   2025-11-21
  */
+
+declare(strict_types=1);
+
 class Expense
 {
+   private const STATUS_PENDING   = 'Pending Approval';
+   private const STATUS_APPROVED  = 'Approved';
+   private const STATUS_REJECTED  = 'Rejected';
+   private const STATUS_CANCELLED = 'Cancelled';
+
    /**
-    * Create a new expense entry
-    * @param array $data Expense data including title, amount, category, fiscal year, and member ID
-    * @return array Result of the operation
-    * @throws Exception if validation fails or database operations fail
+    * Create a new expense request
+    *
+    * @param array $data Expense data
+    * @return array Success response with expense_id
     */
-   public static function create($data)
+   public static function create(array $data): array
    {
       $orm = new ORM();
-      try {
-         // Validate input
-         Helpers::validateInput($data, [
-            'title' => 'required',
-            'amount' => 'required|numeric',
-            'category_id' => 'required|numeric',
+
+      Helpers::validateInput($data, [
+         'title'          => 'required|max:150',
+         'amount'         => 'required|numeric',
+         'expense_date'   => 'required|date',
+         'category_id'    => 'required|numeric',
             'fiscal_year_id' => 'required|numeric',
-            'member_id' => 'required|numeric'
-         ]);
+         'branch_id'      => 'required|numeric',
+         'description'    => 'max:1000|nullable',
+      ]);
 
-         // Validate amount is positive
-         if ($data['amount'] <= 0) Helpers::sendFeedback('Expense amount must be positive');
+      $amount       = (float)$data['amount'];
+      $expenseDate  = $data['expense_date'];
+      $categoryId   = (int)$data['category_id'];
+      $fiscalYearId = (int)$data['fiscal_year_id'];
+      $branchId     = (int)$data['branch_id'];
 
-         // Validate fiscal year is active
-         $fiscalYear = $orm->getWhere('fiscalyear', ['FiscalYearID' => $data['fiscal_year_id'], 'Status' => 'Active']);
-         if (empty($fiscalYear)) Helpers::sendFeedback('Selected fiscal year is not active');
-
-         // Validate category exists
-         $category = $orm->getWhere('expensecategory', ['ExpCategoryID' => $data['category_id']]);
-         if (empty($category)) Helpers::sendFeedback('Invalid expense category');
-
-         // Validate member exists
-         $member = $orm->getWhere('churchmember', ['MbrID' => $data['member_id'], 'Deleted' => 0]);
-         if (empty($member)) Helpers::sendFeedback('Invalid member ID');
-
-         $orm->beginTransaction();
-         $expenseId = $orm->insert('expense', [
-            'ExpTitle' => $data['title'],
-            'ExpPurpose' => $data['purpose'] ?? null,
-            'ExpAmount' => $data['amount'],
-            'ExpDate' => $data['date'] ?? date('Y-m-d'),
-            'ExpStatus' => 'Pending Approval',
-            'MbrID' => $data['member_id'],
-            'FiscalYearID' => $data['fiscal_year_id'],
-            'ExpCategoryID' => $data['category_id']
-         ])['id'];
-
-         // Create notification for admins
-         $adminUsers = $orm->selectWithJoin(
-            baseTable: 'userauthentication u',
-            joins: [
-               ['table' => 'memberrole mr', 'on' => 'u.MbrID = mr.MbrID'],
-               ['table' => 'churchrole cr', 'on' => 'mr.ChurchRoleID = cr.RoleID'],
-               ['table' => 'rolepermission rp', 'on' => 'cr.RoleID = rp.ChurchRoleID'],
-               ['table' => 'permission p', 'on' => 'rp.PermissionID = p.PermissionID']
-            ],
-            fields: ['u.MbrID'],
-            conditions: ['p.PermissionName' => ':permission'],
-            params: [':permission' => 'approve_expense']
-         );
-
-         foreach ($adminUsers as $admin) {
-            $orm->insert('communication', [
-               'Title' => 'New Expense Submitted',
-               'Message' => "Expense '{$data['title']}' for {$data['amount']} submitted by member ID {$data['member_id']} requires approval.",
-               'SentBy' => $data['member_id'],
-               'TargetGroupID' => null
-            ]);
-         }
-         $orm->commit();
-
-         return ['status' => 'success', 'expense_id' => $expenseId];
-      } catch (Exception $e) {
-         if ($orm->inTransaction()) $orm->rollBack();
-
-         Helpers::logError('Expense create error: ' . $e->getMessage());
-         Helpers::sendFeedback('Expense creation error.');
+      if ($amount <= 0) {
+         Helpers::sendFeedback('Expense amount must be greater than zero', 400);
       }
+
+      if ($expenseDate > date('Y-m-d')) {
+         Helpers::sendFeedback('Expense date cannot be in the future', 400);
+      }
+
+      // Validate references
+      $valid = $orm->runQuery(
+         "SELECT 
+                (SELECT COUNT(*) FROM expense_category WHERE ExpenseCategoryID = :cat AND Deleted = 0) AS cat_ok,
+                (SELECT COUNT(*) FROM fiscalyear WHERE FiscalYearID = :fy AND Status = 'Active') AS fy_ok,
+                (SELECT COUNT(*) FROM branch WHERE BranchID = :br) AS br_ok",
+         [':cat' => $categoryId, ':fy' => $fiscalYearId, ':br' => $branchId]
+      )[0];
+
+      if ($valid['cat_ok'] == 0) Helpers::sendFeedback('Invalid expense category', 400);
+      if ($valid['fy_ok'] == 0)   Helpers::sendFeedback('Invalid or inactive fiscal year', 400);
+      if ($valid['br_ok'] == 0)   Helpers::sendFeedback('Invalid branch', 400);
+
+      $expenseId = $orm->insert('expense', [
+         'ExpenseTitle'       => $data['title'],
+         'ExpenseDescription' => $data['description'] ?? null,
+         'ExpenseAmount'      => $amount,
+         'ExpenseDate'        => $expenseDate,
+         'ExpenseCategoryID'  => $categoryId,
+         'FiscalYearID'       => $fiscalYearId,
+         'BranchID'           => $branchId,
+         'ExpenseStatus'      => self::STATUS_PENDING,
+         'RequestedBy'        => Auth::getCurrentUserId($token ?? ''),
+         'RequestedAt'        => date('Y-m-d H:i:s')
+      ])['id'];
+
+      Helpers::logError("New expense request: ExpenseID $expenseId | Amount $amount");
+
+      return ['status' => 'success', 'expense_id' => $expenseId];
    }
+
    /**
-    * Update an existing expense entry
-    * @param int $expenseId The ID of the expense to update
-    * @param array $data Updated expense data
-    * @return array Result of the operation
-    * @throws Exception if validation fails or database operations fail
+    * Approve or reject an expense
+    *
+    * @param int    $expenseId Expense ID
+    * @param string $action    'approve' or 'reject'
+    * @param string|null $remarks Optional remarks
+    * @return array Success response
     */
-   public static function update($expenseId, $data)
+   public static function review(int $expenseId, string $action, ?string $remarks = null): array
    {
       $orm = new ORM();
-      try {
-         // Validate input
-         Helpers::validateInput($data, [
-            'title' => 'required',
-            'amount' => 'required|numeric',
-            'category_id' => 'required|numeric',
-            'fiscal_year_id' => 'required|numeric'
-         ]);
 
-         // Validate amount is positive
-         if ($data['amount'] <= 0) Helpers::sendFeedback('Expense amount must be positive');
-
-         // Validate fiscal year is active
-         $fiscalYear = $orm->getWhere('fiscalyear', ['FiscalYearID' => $data['fiscal_year_id'], 'Status' => 'Active']);
-         if (empty($fiscalYear)) Helpers::sendFeedback('Selected fiscal year is not active');
-
-         // Validate category exists
-         $category = $orm->getWhere('expensecategory', ['ExpCategoryID' => $data['category_id']]);
-         if (empty($category)) Helpers::sendFeedback('Invalid expense category');
-
-         // Validate expense exists and is pending
-         $expense = $orm->getWhere('expense', ['ExpID' => $expenseId]);
-         if (empty($expense)) Helpers::sendFeedback('Expense not found');
-         if ($expense[0]['ExpStatus'] !== 'Pending Approval') Helpers::sendFeedback('Cannot update approved or declined expense');
-
-         $orm->beginTransaction();
-         $orm->update('expense', [
-            'ExpTitle' => $data['title'],
-            'ExpPurpose' => $data['purpose'] ?? null,
-            'ExpAmount' => $data['amount'],
-            'ExpDate' => $data['date'] ?? date('Y-m-d'),
-            'FiscalYearID' => $data['fiscal_year_id'],
-            'ExpCategoryID' => $data['category_id']
-         ], ['ExpID' => $expenseId]);
-         $orm->commit();
-
-         return ['status' => 'success', 'expense_id' => $expenseId];
-      } catch (Exception $e) {
-         if ($orm->inTransaction())  $orm->rollBack();
-
-         Helpers::logError('Expense update error: ' . $e->getMessage());
-         Helpers::sendFeedback('Expense update error.');
+      $expense = $orm->getWhere('expense', ['ExpenseID' => $expenseId])[0] ?? null;
+      if (!$expense) {
+         Helpers::sendFeedback('Expense not found', 404);
       }
+
+      if ($expense['ExpenseStatus'] !== self::STATUS_PENDING) {
+         Helpers::sendFeedback('Only pending expenses can be reviewed', 400);
+      }
+
+      if (!in_array($action, ['approve', 'reject'])) {
+         Helpers::sendFeedback('Action must be approve or reject', 400);
+      }
+
+      $newStatus = ($action === 'approve') ? self::STATUS_APPROVED : self::STATUS_REJECTED;
+
+      $orm->update('expense', [
+         'ExpenseStatus'   => $newStatus,
+         'ApprovedBy'      => Auth::getCurrentUserId($token ?? ''),
+         'ApprovedAt'      => date('Y-m-d H:i:s'),
+         'ApprovalRemarks' => $remarks
+      ], ['ExpenseID' => $expenseId]);
+
+      Helpers::logError("Expense {$action}d: ExpenseID $expenseId");
+
+      return ['status' => 'success', 'message' => "Expense has been {$action}d"];
    }
+
    /**
-    * Delete an expense entry
-    * @param int $expenseId The ID of the expense to delete
-    * @return array Result of the operation
-    * @throws Exception if validation fails or database operations fail
+    * Retrieve a single expense with full details
+    *
+    * @param int $expenseId Expense ID
+    * @return array Expense data
     */
-   public static function delete($expenseId)
+   public static function get(int $expenseId): array
    {
       $orm = new ORM();
-      try {
-         // Validate expense exists and is pending
-         $expense = $orm->getWhere('expense', ['ExpID' => $expenseId]);
-         if (empty($expense)) Helpers::sendFeedback('Expense not found');
 
-         if ($expense[0]['ExpStatus'] !== 'Pending Approval') Helpers::sendFeedback('Cannot delete approved or declined expense');
-
-         $orm->beginTransaction();
-         $orm->delete('expense', ['ExpID' => $expenseId]);
-         $orm->commit();
-
-         return ['status' => 'success'];
-      } catch (Exception $e) {
-         if ($orm->inTransaction()) $orm->rollBack();
-
-         Helpers::logError('Expense delete error: ' . $e->getMessage());
-         Helpers::sendFeedback('Expense delete failed.');
-      }
-   }
-   /**
-    * Get a single expense entry by ID
-    * @param int $expenseId The ID of the expense to retrieve
-    * @return array|null The expense data or null if not found
-    * @throws Exception if database operations fail
-    */
-   public static function get($expenseId)
-   {
-      $orm = new ORM();
-      try {
-         $expense = $orm->selectWithJoin(
+      $expenses = $orm->selectWithJoin(
             baseTable: 'expense e',
             joins: [
-               ['table' => 'churchmember m', 'on' => 'e.MbrID = m.MbrID', 'type' => 'LEFT'],
-               ['table' => 'expensecategory ec', 'on' => 'e.ExpCategoryID = ec.ExpCategoryID', 'type' => 'LEFT'],
-               ['table' => 'expense_approval ea', 'on' => 'e.ExpID = ea.ExpID', 'type' => 'LEFT'],
-               ['table' => 'churchmember ma', 'on' => 'ea.ApproverID = ma.MbrID', 'type' => 'LEFT']
+            ['table' => 'expense_category ec', 'on' => 'e.ExpenseCategoryID = ec.ExpenseCategoryID'],
+            ['table' => 'fiscalyear fy',       'on' => 'e.FiscalYearID = fy.FiscalYearID'],
+            ['table' => 'branch b',            'on' => 'e.BranchID = b.BranchID'],
+            ['table' => 'churchmember r',      'on' => 'e.RequestedBy = r.MbrID', 'type' => 'LEFT'],
+            ['table' => 'churchmember a',      'on' => 'e.ApprovedBy = a.MbrID', 'type' => 'LEFT']
             ],
             fields: [
-               'e.*',
-               'CONCAT(m.MbrFirstName, " ", m.MbrFamilyName) AS MemberName',
-               'ec.ExpCategoryName',
-               'ea.ApprovalStatus',
-               'ea.ApprovalDate',
-               'ea.Comments',
-               'CONCAT(ma.MbrFirstName, " ", ma.MbrFamilyName) AS ApproverName',
+            'e.*',
+            'ec.CategoryName',
+            'fy.YearName AS FiscalYear',
+            'b.BranchName',
+            'r.MbrFirstName AS RequesterFirstName',
+            'r.MbrFamilyName AS RequesterFamilyName',
+            'a.MbrFirstName AS ApproverFirstName',
+            'a.MbrFamilyName AS ApproverFamilyName'
             ],
-            conditions: ['e.ExpID' => ':id'],
+         conditions: ['e.ExpenseID' => ':id'],
             params: [':id' => $expenseId]
-         )[0] ?? null;
+      );
 
-         if (!$expense) Helpers::sendFeedback('Expense not found');
-
-         return $expense;
-      } catch (Exception $e) {
-         Helpers::logError('Expense get error: ' . $e->getMessage());
-         Helpers::sendFeedback('Expense retrieval error.');
+      if (empty($expenses)) {
+         Helpers::sendFeedback('Expense not found', 404);
       }
+
+      return $expenses[0];
    }
+
    /**
-    * Approve or decline an expense
-    * @param int $expenseId The ID of the expense to approve/decline
-    * @param int $approverId The ID of the member approving/declining
-    * @param string $status 'Approved' or 'Declined'
-    * @param string|null $comments Optional comments for the approval/decline
-    * @return array Result of the operation
-    * @throws Exception if validation fails or database operations fail
+    * Retrieve paginated list of expenses with filters
+    *
+    * @param int   $page    Page number
+    * @param int   $limit   Items per page
+    * @param array $filters Filters
+    * @return array Paginated result
     */
-   public static function approve($expenseId, $approverId, $status, $comments = null)
+   public static function getAll(int $page = 1, int $limit = 10, array $filters = []): array
    {
       $orm = new ORM();
-      $transactionStarted = false;
-      try {
-         // Validate inputs
-         if (!in_array($status, ['Approved', 'Declined'])) Helpers::sendFeedback('Invalid approval status');
-         if (!is_numeric($expenseId) || $expenseId <= 0) Helpers::sendFeedback('Invalid expense ID');
-         if (!is_numeric($approverId) || $approverId <= 0) Helpers::sendFeedback('Invalid approver ID');
+      $offset = ($page - 1) * $limit;
 
-         // Validate expense exists and is pending
-         $expense = $orm->getWhere('expense', ['ExpID' => $expenseId]);
-         if (empty($expense)) Helpers::sendFeedback('Expense not found');
-         if ($expense[0]['ExpStatus'] !== 'Pending Approval') Helpers::sendFeedback('Expense is already processed');
+      $conditions = [];
+      $params = [];
 
-         // Validate approver exists
-         $approver = $orm->getWhere('churchmember', ['MbrID' => $approverId, 'Deleted' => 0]);
-         if (empty($approver)) Helpers::sendFeedback('Invalid approver ID');
-
-         $orm->beginTransaction();
-         $transactionStarted = true;
-
-         $orm->update('expense', [
-            'ExpStatus' => $status
-         ], ['ExpID' => $expenseId]);
-
-         $orm->insert('expense_approval', [
-            'ExpID' => $expenseId,
-            'ApproverID' => $approverId,
-            'ApprovalStatus' => $status,
-            'ApprovalDate' => date('Y-m-d H:i:s'),
-            'Comments' => $comments
-         ]);
-
-         // Create notification for submitter
-         $message = "Your expense '{$expense[0]['ExpTitle']}' for {$expense[0]['ExpAmount']} has been {$status}.";
-         if ($comments)  $message .= " Comments: {$comments}";
-
-         $orm->insert('communication', [
-            'Title' => "Expense {$status}",
-            'Message' => $message,
-            'SentBy' => $approverId,
-            'TargetGroupID' => null
-         ]);
-         $orm->commit();
-
-         return ['status' => 'success', 'expense_id' => $expenseId];
-      } catch (Exception $e) {
-         if ($transactionStarted && $orm->inTransaction()) $orm->rollBack();
-         Helpers::logError('Expense approval error: ' . $e->getMessage());
-         Helpers::sendFeedback('Expense approval failed.');
-         // throw $e;
+      if (!empty($filters['fiscal_year_id'])) {
+         $conditions['e.FiscalYearID'] = ':fy';
+         $params[':fy'] = (int)$filters['fiscal_year_id'];
       }
-   }
-   /**
-    * Get all expenses with pagination and optional filters
-    * @param int $page Page number for pagination
-    * @param int $limit Number of records per page
-    * @param array $filters Optional filters for fiscal year, category, and status
-    * @return array List of expenses with pagination info
-    * @throws Exception if database operations fail
-    */
-   public static function getAll($page = 1, $limit = 10, $filters = [])
-   {
-      $orm = new ORM();
-      try {
-         $offset = ($page - 1) * $limit;
-         $conditions = [];
-         $params = [];
-
-         if (!empty($filters['fiscal_year_id']) && is_numeric($filters['fiscal_year_id'])) {
-            $conditions['e.FiscalYearID'] = ':fiscal_year_id';
-            $params[':fiscal_year_id'] = $filters['fiscal_year_id'];
-         }
-         if (!empty($filters['category_id']) && is_numeric($filters['category_id'])) {
-            $conditions['e.ExpCategoryID'] = ':category_id';
-            $params[':category_id'] = $filters['category_id'];
-         }
-         if (!empty($filters['status']) && in_array($filters['status'], ['Pending Approval', 'Approved', 'Declined'])) {
-            $conditions['e.ExpStatus'] = ':status';
+      if (!empty($filters['branch_id'])) {
+         $conditions['e.BranchID'] = ':br';
+         $params[':br'] = (int)$filters['branch_id'];
+      }
+      if (!empty($filters['category_id'])) {
+         $conditions['e.ExpenseCategoryID'] = ':cat';
+         $params[':cat'] = (int)$filters['category_id'];
+      }
+      if (!empty($filters['status'])) {
+         $conditions['e.ExpenseStatus'] = ':status';
             $params[':status'] = $filters['status'];
-         }
+      }
+      if (!empty($filters['start_date'])) {
+         $conditions['e.ExpenseDate >='] = ':start';
+         $params[':start'] = $filters['start_date'];
+      }
+      if (!empty($filters['end_date'])) {
+         $conditions['e.ExpenseDate <='] = ':end';
+         $params[':end'] = $filters['end_date'];
+      }
 
-         $expenses = $orm->selectWithJoin(
+      $expenses = $orm->selectWithJoin(
             baseTable: 'expense e',
             joins: [
-               ['table' => 'churchmember m', 'on' => 'e.MbrID = m.MbrID', 'type' => 'LEFT'],
-               ['table' => 'expensecategory ec', 'on' => 'e.ExpCategoryID = ec.ExpCategoryID', 'type' => 'LEFT'],
-               ['table' => 'expense_approval ea', 'on' => 'e.ExpID = ea.ExpID', 'type' => 'LEFT'],
-               ['table' => 'churchmember ma', 'on' => 'ea.ApproverID = ma.MbrID', 'type' => 'LEFT']
+            ['table' => 'expense_category ec', 'on' => 'e.ExpenseCategoryID = ec.ExpenseCategoryID'],
+            ['table' => 'fiscalyear fy',       'on' => 'e.FiscalYearID = fy.FiscalYearID'],
+            ['table' => 'branch b',            'on' => 'e.BranchID = b.BranchID']
             ],
             fields: [
-               'e.*',
-               'CONCAT(m.MbrFirstName, " ", m.MbrFamilyName) AS MemberName',
-               'ec.ExpCategoryName',
-               'ea.ApprovalStatus',
-               'ea.ApprovalDate',
-               'ea.Comments',
-               'CONCAT(ma.MbrFirstName, " ", ma.MbrFamilyName) AS ApproverName',
+            'e.ExpenseID',
+            'e.ExpenseTitle',
+            'e.ExpenseAmount',
+            'e.ExpenseDate',
+            'e.ExpenseStatus',
+            'ec.CategoryName',
+            'fy.YearName AS FiscalYear',
+            'b.BranchName'
             ],
             conditions: $conditions,
             params: $params,
+         orderBy: ['e.ExpenseDate' => 'DESC'],
             limit: $limit,
             offset: $offset
-         );
+      );
 
-         $whereClauses = [];
-         foreach ($conditions as $column => $placeholder) $whereClauses[] = "{$column} = {$placeholder}";
-
-         $whereSql = !empty($whereClauses) ? ' WHERE ' . implode(' AND ', $whereClauses) : '';
-
-         $total = $orm->runQuery(
-            "SELECT COUNT(*) as total FROM expense e" . $whereSql . '',
+      $total = $orm->runQuery(
+         "SELECT COUNT(*) AS total FROM expense e" . ($conditions ? ' WHERE ' . implode(' AND ', array_keys($conditions)) : ''),
             $params
-         )[0]['total'];
+      )[0]['total'];
 
-         return [
+      return [
             'data' => $expenses,
             'pagination' => [
-               'page' => $page,
-               'limit' => $limit,
-               'total' => $total,
-               'pages' => ceil($total / $limit)
+            'page'  => $page,
+            'limit' => $limit,
+            'total' => (int)$total,
+            'pages' => (int)ceil($total / $limit)
             ]
-         ];
-      } catch (Exception $e) {
-         Helpers::logError('Expense getAll error: ' . $e->getMessage());
-         Helpers::sendFeedback('Expense retrieval failed');
-      }
+      ];
    }
+
    /**
-    * Get expense reports based on type and optional filters
-    * @param string $type Report type (by_category, by_fiscal_year, pending_vs_approved, by_month)
-    * @param array $filters Optional filters for the report
-    * @return array Report data
-    * @throws Exception if report type is invalid or database operations fail
+    * Cancel a pending expense request
+    *
+    * Only pending (not yet approved) expenses can be cancelled.
+    * Approved expenses must be reversed via a separate correcting entry.
+    *
+    * @param int    $expenseId Expense ID
+    * @param string $reason    Reason for cancellation (required for audit)
+    * @return array Success response
     */
-   public static function getReports($type, $filters = [])
+   public static function cancel(int $expenseId, string $reason): array
    {
-      $orm = new ORM();
-      try {
-         $params = [];
-         $sql = '';
-
-         switch ($type) {
-            case 'by_category':
-               $sql = "SELECT ec.ExpCategoryName, SUM(e.ExpAmount) as total, COUNT(e.ExpID) as count 
-                            FROM expense e 
-                            JOIN expensecategory ec ON e.ExpCategoryID = ec.ExpCategoryID";
-               if (!empty($filters['fiscal_year_id'])) {
-                  $sql .= " WHERE e.FiscalYearID = :fiscal_year_id";
-                  $params[':fiscal_year_id'] = $filters['fiscal_year_id'];
-               }
-               $sql .= " GROUP BY ec.ExpCategoryID";
-               break;
-
-            case 'by_fiscal_year':
-               $sql = "SELECT fy.FiscalYearStartDate, fy.FiscalYearEndDate, SUM(e.ExpAmount) as total, COUNT(e.ExpID) as count 
-                            FROM expense e 
-                            JOIN fiscalyear fy ON e.FiscalYearID = fy.FiscalYearID 
-                            GROUP BY fy.FiscalYearID";
-               break;
-
-            case 'pending_vs_approved':
-               $sql = "SELECT e.ExpStatus, SUM(e.ExpAmount) as total, COUNT(e.ExpID) as count 
-                            FROM expense e";
-               if (!empty($filters['fiscal_year_id'])) {
-                  $sql .= " WHERE e.FiscalYearID = :fiscal_year_id";
-                  $params[':fiscal_year_id'] = $filters['fiscal_year_id'];
-               }
-               $sql .= " GROUP BY e.ExpStatus";
-               break;
-
-            case 'by_month':
-               $sql = "SELECT DATE_FORMAT(e.ExpDate, '%Y-%m') as month, SUM(e.ExpAmount) as total, COUNT(e.ExpID) as count 
-                            FROM expense e";
-               if (!empty($filters['year'])) {
-                  $sql .= " WHERE YEAR(e.ExpDate) = :year";
-                  $params[':year'] = $filters['year'];
-               }
-               $sql .= " GROUP BY DATE_FORMAT(e.ExpDate, '%Y-%m')";
-               break;
-
-            default:
-               Helpers::sendFeedback('Invalid report type');
-         }
-
-         $results = $orm->runQuery($sql, $params);
-
-         return ['data' => $results];
-      } catch (Exception $e) {
-         Helpers::logError('Expense report error: ' . $e->getMessage());
-         Helpers::sendFeedback('Expense report failed.');
+      if (trim($reason) === '') {
+         Helpers::sendFeedback('Cancellation reason is required', 400);
       }
+
+      $orm = new ORM();
+
+      $expense = $orm->getWhere('expense', ['ExpenseID' => $expenseId])[0] ?? null;
+      if (!$expense) {
+         Helpers::sendFeedback('Expense not found', 404);
+      }
+
+      if ($expense['ExpenseStatus'] === self::STATUS_APPROVED) {
+         Helpers::sendFeedback('Approved expenses cannot be cancelled. Use a reversing entry instead.', 400);
+      }
+
+      if ($expense['ExpenseStatus'] === self::STATUS_CANCELLED) {
+         Helpers::sendFeedback('Expense is already cancelled', 400);
+      }
+
+      $orm->update('expense', [
+         'ExpenseStatus'       => self::STATUS_CANCELLED,
+         'CancellationReason'  => $reason,
+         'CancelledBy'         => Auth::getCurrentUserId($token ?? ''),
+         'CancelledAt'         => date('Y-m-d H:i:s')
+      ], ['ExpenseID' => $expenseId]);
+
+      Helpers::logError("Expense cancelled: ExpenseID $expenseId | Reason: $reason");
+
+      return [
+         'status'  => 'success',
+         'message' => 'Expense has been cancelled'
+      ];
    }
 }
-?>
