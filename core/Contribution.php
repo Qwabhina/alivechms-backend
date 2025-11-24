@@ -1,15 +1,15 @@
 <?php
 
 /**
- * Contribution Management Class
+ * Contribution Management
  *
- * Handles all operations related to member contributions (tithes, offerings, pledges, etc.)
- * including creation, updates, soft deletion, restoration, and comprehensive reporting.
+ * Handles creation, update, soft deletion, restoration,
+ * retrieval, and reporting of member financial contributions.
  *
- * @package AliveChMS\Core
- * @version 1.0.0
- * @author  Benjamin Ebo Yankson
- * @since   2025-11-21
+ * @package  AliveChMS\Core
+ * @version  1.0.0
+ * @author   Benjamin Ebo Yankson
+ * @since    2025-November
  */
 
 declare(strict_types=1);
@@ -19,8 +19,8 @@ class Contribution
    /**
     * Create a new contribution record
     *
-    * @param array $data Contribution data
-    * @return array Success response with contribution_id
+    * @param array $data Contribution payload
+    * @return array ['status' => 'success', 'contribution_id' => int]
     * @throws Exception On validation or database failure
     */
    public static function create(array $data): array
@@ -28,13 +28,13 @@ class Contribution
       $orm = new ORM();
 
       Helpers::validateInput($data, [
-         'amount'              => 'required|numeric',
-         'date'                => 'required|date',
+         'amount'               => 'required|numeric',
+         'date'                 => 'required|date',
          'contribution_type_id' => 'required|numeric',
-         'member_id'           => 'required|numeric',
-         'payment_option_id'   => 'required|numeric',
-         'fiscal_year_id'      => 'required|numeric',
-         'description'         => 'max:500|nullable',
+         'member_id'            => 'required|numeric',
+         'payment_option_id'    => 'required|numeric',
+         'fiscal_year_id'       => 'required|numeric',
+         'description'          => 'max:500|nullable',
       ]);
 
       $amount         = (float)$data['amount'];
@@ -48,30 +48,29 @@ class Contribution
          Helpers::sendFeedback('Contribution amount must be greater than zero', 400);
       }
 
-      // Validate date is not in the future
       if ($contributionDate > date('Y-m-d')) {
          Helpers::sendFeedback('Contribution date cannot be in the future', 400);
       }
 
-      // Validate foreign keys exist
-      $validations = $orm->runQuery(
-         "SELECT 
-                (SELECT COUNT(*) FROM churchmember WHERE MbrID = :member_id AND Deleted = 0 AND MbrMembershipStatus = 'Active') AS member_ok,
-                (SELECT COUNT(*) FROM contributiontype WHERE ContributionTypeID = :type_id) AS type_ok,
-                (SELECT COUNT(*) FROM paymentoption WHERE PaymentOptionID = :payment_id) AS payment_ok,
-                (SELECT COUNT(*) FROM fiscalyear WHERE FiscalYearID = :fiscal_id AND Status = 'Active') AS fiscal_ok",
+      // Validate foreign keys
+      $valid = $orm->runQuery(
+         "SELECT
+                (SELECT COUNT(*) FROM churchmember WHERE MbrID = :mid AND Deleted = 0 AND MbrMembershipStatus = 'Active') AS member_ok,
+                (SELECT COUNT(*) FROM contributiontype WHERE ContributionTypeID = :tid) AS type_ok,
+                (SELECT COUNT(*) FROM paymentoption WHERE PaymentOptionID = :pid) AS payment_ok,
+                (SELECT COUNT(*) FROM fiscalyear WHERE FiscalYearID = :fyid AND Status = 'Active') AS fiscal_ok",
             [
-            ':member_id' => $memberId,
-            ':type_id'   => $typeId,
-            ':payment_id' => $paymentId,
-            ':fiscal_id' => $fiscalYearId
+            ':mid' => $memberId,
+            ':tid' => $typeId,
+            ':pid' => $paymentId,
+            ':fyid' => $fiscalYearId
             ]
       )[0];
 
-      if ($validations['member_ok'] == 0) Helpers::sendFeedback('Invalid or inactive member', 400);
-      if ($validations['type_ok'] == 0)   Helpers::sendFeedback('Invalid contribution type', 400);
-      if ($validations['payment_ok'] == 0) Helpers::sendFeedback('Invalid payment option', 400);
-      if ($validations['fiscal_ok'] == 0)  Helpers::sendFeedback('Invalid or inactive fiscal year', 400);
+      if ($valid['member_ok'] == 0)   Helpers::sendFeedback('Invalid or inactive member', 400);
+      if ($valid['type_ok'] == 0)     Helpers::sendFeedback('Invalid contribution type', 400);
+      if ($valid['payment_ok'] == 0)  Helpers::sendFeedback('Invalid payment option', 400);
+      if ($valid['fiscal_ok'] == 0)   Helpers::sendFeedback('Invalid or inactive fiscal year', 400);
 
       $orm->beginTransaction();
       try {
@@ -84,14 +83,13 @@ class Contribution
             'FiscalYearID'         => $fiscalYearId,
             'Description'          => $data['description'] ?? null,
             'Deleted'              => 0,
-            'RecordedBy'           => Auth::getCurrentUserId($token ?? ''),
+            'RecordedBy'           => Auth::getCurrentUserId(),
             'RecordedAt'           => date('Y-m-d H:i:s')
          ])['id'];
 
          $orm->commit();
 
          Helpers::logError("New contribution recorded: ID $contributionId | Amount $amount | Member $memberId");
-
          return ['status' => 'success', 'contribution_id' => $contributionId];
       } catch (Exception $e) {
          $orm->rollBack();
@@ -105,7 +103,7 @@ class Contribution
     *
     * @param int   $contributionId Contribution ID
     * @param array $data           Updated data
-    * @return array Success response
+    * @return array ['status' => 'success', 'contribution_id' => int]
     */
    public static function update(int $contributionId, array $data): array
    {
@@ -117,14 +115,15 @@ class Contribution
       }
 
       Helpers::validateInput($data, [
-         'amount'              => 'numeric|nullable',
-         'date'                => 'date|nullable',
+         'amount'               => 'numeric|nullable',
+         'date'                 => 'date|nullable',
          'contribution_type_id' => 'numeric|nullable',
-         'payment_option_id'   => 'numeric|nullable',
-         'description'         => 'max:500|nullable',
+         'payment_option_id'    => 'numeric|nullable',
+         'description'          => 'max:500|nullable',
       ]);
 
       $update = [];
+
       if (isset($data['amount']) && (float)$data['amount'] > 0) {
          $update['ContributionAmount'] = (float)$data['amount'];
       }
@@ -155,7 +154,7 @@ class Contribution
     * Soft delete a contribution
     *
     * @param int $contributionId Contribution ID
-    * @return array Success response
+    * @return array ['status' => 'success']
     */
    public static function delete(int $contributionId): array
    {
@@ -173,7 +172,7 @@ class Contribution
     * Restore a soft-deleted contribution
     *
     * @param int $contributionId Contribution ID
-    * @return array Success response
+    * @return array ['status' => 'success']
     */
    public static function restore(int $contributionId): array
    {
@@ -197,12 +196,12 @@ class Contribution
    {
       $orm = new ORM();
 
-      $contributions = $orm->selectWithJoin(
+      $result = $orm->selectWithJoin(
             baseTable: 'contribution c',
             joins: [
-            ['table' => 'churchmember m', 'on' => 'c.MbrID = m.MbrID'],
-            ['table' => 'contributiontype ct', 'on' => 'c.ContributionTypeID = ct.ContributionTypeID'],
-            ['table' => 'paymentoption p', 'on' => 'c.PaymentOptionID = p.PaymentOptionID']
+            ['table' => 'churchmember m',       'on' => 'c.MbrID = m.MbrID'],
+            ['table' => 'contributiontype ct',  'on' => 'c.ContributionTypeID = ct.ContributionTypeID'],
+            ['table' => 'paymentoption p',      'on' => 'c.PaymentOptionID = p.PaymentOptionID']
             ],
             fields: [
             'c.*',
@@ -215,11 +214,11 @@ class Contribution
          params: [':id' => $contributionId]
       );
 
-      if (empty($contributions)) {
+      if (empty($result)) {
          Helpers::sendFeedback('Contribution not found', 404);
       }
 
-      return $contributions[0];
+      return $result[0];
    }
 
    /**
@@ -232,11 +231,11 @@ class Contribution
     */
    public static function getAll(int $page = 1, int $limit = 10, array $filters = []): array
    {
-      $orm = new ORM();
+      $orm    = new ORM();
       $offset = ($page - 1) * $limit;
 
       $conditions = ['c.Deleted' => 0];
-      $params = [];
+      $params     = [];
 
       if (!empty($filters['contribution_type_id'])) {
          $conditions['c.ContributionTypeID'] = ':type_id';
@@ -262,9 +261,9 @@ class Contribution
       $contributions = $orm->selectWithJoin(
          baseTable: 'contribution c',
          joins: [
-            ['table' => 'churchmember m', 'on' => 'c.MbrID = m.MbrID'],
-            ['table' => 'contributiontype ct', 'on' => 'c.ContributionTypeID = ct.ContributionTypeID'],
-            ['table' => 'paymentoption p', 'on' => 'c.PaymentOptionID = p.PaymentOptionID']
+            ['table' => 'churchmember m',       'on' => 'c.MbrID = m.MbrID'],
+            ['table' => 'contributiontype ct',  'on' => 'c.ContributionTypeID = ct.ContributionTypeID'],
+            ['table' => 'paymentoption p',      'on' => 'c.PaymentOptionID = p.PaymentOptionID']
          ],
          fields: [
             'c.ContributionID',
@@ -292,10 +291,10 @@ class Contribution
       return [
             'data' => $contributions,
             'pagination' => [
-            'page'  => $page,
-            'limit' => $limit,
-            'total' => (int)$total,
-            'pages' => (int)ceil($total / $limit)
+            'page'   => $page,
+            'limit'  => $limit,
+            'total'  => (int)$total,
+            'pages'  => (int)ceil($total / $limit)
             ]
       ];
    }
@@ -304,15 +303,15 @@ class Contribution
     * Get total contributions with filters
     *
     * @param array $filters Filters
-    * @return array Total amount
+    * @return array ['total_contribution' => string]
     */
    public static function getTotal(array $filters = []): array
    {
       $orm = new ORM();
-      $conditions = ['c.Deleted' => 0];
-      $params = [];
 
-      // Apply same filters as getAll
+      $conditions = ['c.Deleted' => 0];
+      $params     = [];
+
       if (!empty($filters['contribution_type_id'])) {
          $conditions['c.ContributionTypeID'] = ':type_id';
          $params[':type_id'] = (int)$filters['contribution_type_id'];
