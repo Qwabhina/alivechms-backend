@@ -1,173 +1,188 @@
 <?php
 
 /**
- * Budget API Routes – Full Featured & Convention-Compliant
+ * Budget API Routes – v1
  *
- * RESTful endpoints exactly as requested:
- * - /budget/create
- * - /budget/update/{id}
- * - /budget/delete/{id}
- * - /budget/view/{id}
- * - /budget/all
- * - /budget/submit/{id}
- * - /budget/review/{id}
- * - /budget/item/add/{budgetId}
- * - /budget/item/update/{itemId}
- * - /budget/item/delete/{itemId}
+ * Full budget lifecycle with line-item management and approval workflow:
+ * - Create draft budget with items
+ * - Update draft budget
+ * - Submit for approval
+ * - Review (approve/reject)
+ * - View single budget with items
+ * - Paginated listing with filters
+ * - Line-item CRUD (add/update/delete)
  *
- * @package AliveChMS\Routes
- * @version 1.0.0
- * @author  Benjamin Ebo Yankson
- * @since   2025-11-21
+ * All operations strictly permission-controlled.
+ *
+ * @package  AliveChMS\Routes
+ * @version  1.0.0
+ * @author   Benjamin Ebo Yankson
+ * @since    2025-November
  */
+
+declare(strict_types=1);
 
 require_once __DIR__ . '/../core/Budget.php';
 
-// Authentication required for all budget routes
-if (!$token || !Auth::verify($token)) {
+// ---------------------------------------------------------------------
+// AUTHENTICATION & AUTHORIZATION
+// ---------------------------------------------------------------------
+$token = Auth::getBearerToken();
+if (!$token || Auth::verify($token) === false) {
    Helpers::sendFeedback('Unauthorized: Valid token required', 401);
 }
 
-// Extract path components
-$action     = $pathParts[1] ?? '';        // create | update | view | all | submit | review | item
-$resourceId = $pathParts[2] ?? null;       // BudgetID or ItemID
-$subAction  = $pathParts[3] ?? null;       // add | update | delete (for items)
-
 // ---------------------------------------------------------------------
-// BUDGET LEVEL ENDPOINTS
+// ROUTE DISPATCHER
 // ---------------------------------------------------------------------
-if ($action !== 'item') {
+match (true) {
 
-   switch ("$method $action") {
+   // CREATE BUDGET (with items)
+   $method === 'POST' && $path === 'budget/create' => (function () use ($token) {
+      Auth::checkPermission($token, 'create_budgets');
 
-      case 'POST create':
-         Auth::checkPermission($token, 'create_budgets');
-         $payload = json_decode(file_get_contents('php://input'), true);
-         if (!$payload) {
+      $payload = json_decode(file_get_contents('php://input'), true);
+      if (!is_array($payload)) {
             Helpers::sendFeedback('Invalid JSON payload', 400);
-         }
-         $result = Budget::create($payload);
-         echo json_encode($result);
-         break;
+      }
 
-      case 'PUT update':
-         Auth::checkPermission($token, 'edit_budgets');
-         if (!$resourceId || !is_numeric($resourceId)) {
-            Helpers::sendFeedback('Budget ID is required in URL', 400);
-         }
-         $payload = json_decode(file_get_contents('php://input'), true) ?? [];
-         $result = Budget::update((int)$resourceId, $payload);
-         echo json_encode($result);
-         break;
+      $result = Budget::create($payload);
+      echo json_encode($result);
+   })(),
 
-      case 'DELETE delete':
-         Auth::checkPermission($token, 'delete_budgets');
-         if (!$resourceId || !is_numeric($resourceId)) {
-            Helpers::sendFeedback('Budget ID is required in URL', 400);
-         }
-         // Soft-delete or hard-delete based on your policy (currently not implemented)
-         Helpers::sendFeedback('Budget deletion not yet implemented', 501);
-         break;
+   // UPDATE BUDGET (title/description only, draft state)
+   $method === 'PUT' && $pathParts[0] === 'budget' && ($pathParts[1] ?? '') === 'update' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
+      Auth::checkPermission($token, 'edit_budgets');
 
-      case 'GET view':
-         Auth::checkPermission($token, 'view_budgets');
-         if (!$resourceId || !is_numeric($resourceId)) {
-            Helpers::sendFeedback('Budget ID is required in URL', 400);
-         }
-         $budget = Budget::get((int)$resourceId);
-         echo json_encode($budget);
-         break;
+      $budgetId = $pathParts[2];
+      if (!is_numeric($budgetId)) {
+         Helpers::sendFeedback('Valid Budget ID required', 400);
+      }
 
-      case 'GET all':
-         Auth::checkPermission($token, 'view_budgets');
-         $page   = max(1, (int)($_GET['page'] ?? 1));
-         $limit  = max(1, min(100, (int)($_GET['limit'] ?? 10)));
-         $filters = [];
-         foreach (['fiscal_year_id', 'branch_id', 'status'] as $key) {
-            if (isset($_GET[$key]) && $_GET[$key] !== '') {
-               $filters[$key] = $_GET[$key];
-            }
-         }
-         $result = Budget::getAll($page, $limit, $filters);
-         echo json_encode($result);
-         break;
+      $payload = json_decode(file_get_contents('php://input'), true);
+      if (!is_array($payload)) {
+         Helpers::sendFeedback('Invalid JSON payload', 400);
+      }
 
-      case 'PUT submit':
-         Auth::checkPermission($token, 'submit_budgets');
-         if (!$resourceId || !is_numeric($resourceId)) {
-            Helpers::sendFeedback('Budget ID is required in URL', 400);
-         }
-         $result = Budget::submitForApproval((int)$resourceId);
-         echo json_encode($result);
-         break;
+      $result = Budget::update((int)$budgetId, $payload);
+      echo json_encode($result);
+   })(),
 
-      case 'POST review':
-         Auth::checkPermission($token, 'approve_budgets');
-         if (!$resourceId || !is_numeric($resourceId)) {
-            Helpers::sendFeedback('Budget ID is required in URL', 400);
-         }
-         $payload = json_decode(file_get_contents('php://input'), true);
-         if (!$payload || !in_array($payload['action'] ?? '', ['approve', 'reject'], true)) {
+   // SUBMIT BUDGET FOR APPROVAL
+   $method === 'PUT' && $pathParts[0] === 'budget' && ($pathParts[1] ?? '') === 'submit' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
+      Auth::checkPermission($token, 'submit_budgets');
+
+      $budgetId = $pathParts[2];
+      if (!is_numeric($budgetId)) {
+         Helpers::sendFeedback('Valid Budget ID required', 400);
+      }
+
+      $result = Budget::submitForApproval((int)$budgetId);
+      echo json_encode($result);
+   })(),
+
+   // REVIEW BUDGET (Approve/Reject)
+   $method === 'POST' && $pathParts[0] === 'budget' && ($pathParts[1] ?? '') === 'review' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
+      Auth::checkPermission($token, 'approve_budgets');
+
+      $budgetId = $pathParts[2];
+      if (!is_numeric($budgetId)) {
+         Helpers::sendFeedback('Valid Budget ID required', 400);
+      }
+
+      $payload = json_decode(file_get_contents('php://input'), true);
+      if (!is_array($payload) || !in_array($payload['action'] ?? '', ['approve', 'reject'], true)) {
             Helpers::sendFeedback('Valid "action" (approve|reject) required', 400);
-         }
-         $result = Budget::review(
-            (int)$resourceId,
+      }
+
+      $result = Budget::review(
+         (int)$budgetId,
             $payload['action'],
             $payload['remarks'] ?? null
-         );
-         echo json_encode($result);
-         break;
+      );
+      echo json_encode($result);
+   })(),
 
-      default:
-         Helpers::sendFeedback('Budget endpoint not found', 404);
-   }
-   exit;
-}
+   // VIEW SINGLE BUDGET (with items)
+   $method === 'GET' && $pathParts[0] === 'budget' && ($pathParts[1] ?? '') === 'view' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
+      Auth::checkPermission($token, 'view_budgets');
 
-// ---------------------------------------------------------------------
-// BUDGET ITEM ENDPOINTS (/budget/item/*)
-// ---------------------------------------------------------------------
-if ($action === 'item') {
+      $budgetId = $pathParts[2];
+      if (!is_numeric($budgetId)) {
+         Helpers::sendFeedback('Valid Budget ID required', 400);
+      }
 
-   switch ("$method $subAction") {
+      $budget = Budget::get((int)$budgetId);
+      echo json_encode($budget);
+   })(),
 
-      case 'POST add':
-         Auth::checkPermission($token, 'edit_budgets');
-         if (!$resourceId || !is_numeric($resourceId)) {
-            Helpers::sendFeedback('Budget ID is required in URL', 400);
+   // LIST ALL BUDGETS (Paginated + Filtered)
+   $method === 'GET' && $path === 'budget/all' => (function () use ($token) {
+      Auth::checkPermission($token, 'view_budgets');
+
+      $page  = max(1, (int)($_GET['page'] ?? 1));
+      $limit = max(1, min(100, (int)($_GET['limit'] ?? 10)));
+
+      $filters = [];
+      foreach (['fiscal_year_id', 'branch_id', 'status'] as $key) {
+         if (isset($_GET[$key]) && $_GET[$key] !== '') {
+            $filters[$key] = $_GET[$key];
          }
-         $payload = json_decode(file_get_contents('php://input'), true);
-         if (!$payload) {
+      }
+
+      $result = Budget::getAll($page, $limit, $filters);
+      echo json_encode($result);
+   })(),
+
+   // ADD BUDGET ITEM
+   $method === 'POST' && $pathParts[0] === 'budget' && ($pathParts[1] ?? '') === 'item' && ($pathParts[2] ?? '') === 'add' && isset($pathParts[3]) => (function () use ($token, $pathParts) {
+      Auth::checkPermission($token, 'edit_budgets');
+
+      $budgetId = $pathParts[3];
+      if (!is_numeric($budgetId)) {
+         Helpers::sendFeedback('Valid Budget ID required', 400);
+      }
+
+      $payload = json_decode(file_get_contents('php://input'), true);
+      if (!is_array($payload)) {
             Helpers::sendFeedback('Invalid JSON payload', 400);
-         }
-         $result = Budget::addItem((int)$resourceId, $payload);
-         echo json_encode($result);
-         break;
+      }
 
-      case 'PUT update':
-         Auth::checkPermission($token, 'edit_budgets');
-         if (!$resourceId || !is_numeric($resourceId)) {
-            Helpers::sendFeedback('Item ID is required in URL', 400);
-         }
-         $payload = json_decode(file_get_contents('php://input'), true) ?? [];
-         $result = Budget::updateItem((int)$resourceId, $payload);
-         echo json_encode($result);
-         break;
+      $result = Budget::addItem((int)$budgetId, $payload);
+      echo json_encode($result);
+   })(),
 
-      case 'DELETE delete':
-         Auth::checkPermission($token, 'edit_budgets');
-         if (!$resourceId || !is_numeric($resourceId)) {
-            Helpers::sendFeedback('Item ID is required in URL', 400);
-         }
-         $result = Budget::deleteItem((int)$resourceId);
-         echo json_encode($result);
-         break;
+   // UPDATE BUDGET ITEM
+   $method === 'PUT' && $pathParts[0] === 'budget' && ($pathParts[1] ?? '') === 'item' && ($pathParts[2] ?? '') === 'update' && isset($pathParts[3]) => (function () use ($token, $pathParts) {
+      Auth::checkPermission($token, 'edit_budgets');
 
-      default:
-         Helpers::sendFeedback('Budget item endpoint not found', 404);
-   }
-   exit;
-}
+      $itemId = $pathParts[3];
+      if (!is_numeric($itemId)) {
+         Helpers::sendFeedback('Valid Item ID required', 400);
+      }
 
-// Fallback
-Helpers::sendFeedback('Invalid budget route', 404);
+      $payload = json_decode(file_get_contents('php://input'), true);
+      if (!is_array($payload)) {
+         Helpers::sendFeedback('Invalid JSON payload', 400);
+      }
+
+      $result = Budget::updateItem((int)$itemId, $payload);
+      echo json_encode($result);
+   })(),
+
+   // DELETE BUDGET ITEM
+   $method === 'DELETE' && $pathParts[0] === 'budget' && ($pathParts[1] ?? '') === 'item' && ($pathParts[2] ?? '') === 'delete' && isset($pathParts[3]) => (function () use ($token, $pathParts) {
+      Auth::checkPermission($token, 'edit_budgets');
+
+      $itemId = $pathParts[3];
+      if (!is_numeric($itemId)) {
+         Helpers::sendFeedback('Valid Item ID required', 400);
+      }
+
+      $result = Budget::deleteItem((int)$itemId);
+      echo json_encode($result);
+   })(),
+
+   // FALLBACK
+   default => Helpers::sendFeedback('Budget endpoint not found', 404),
+};

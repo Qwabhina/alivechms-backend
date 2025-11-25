@@ -1,40 +1,46 @@
 <?php
 
 /**
- * Authentication API Routes
+ * Authentication API Routes – v1
  *
  * Handles login, token refresh, and logout.
- * All responses are standardized JSON.
+ * Public endpoints — no token required.
  *
- * @package AliveChMS\Routes
- * @version 1.0.0
- * @author  Benjamin Ebo Yankson
- * @since   2025-11-20
+ * @package  AliveChMS\Routes
+ * @version  1.0.0
+ * @author   Benjamin Ebo Yankson
+ * @since    2025-November
  */
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    Helpers::sendFeedback('Method not allowed', 405);
-}
+declare(strict_types=1);
 
-switch ($path) {
+require_once __DIR__ . '/../core/Auth.php';
 
-    case 'auth/login':
-        $input = json_decode(file_get_contents('php://input'), true);
-        if (!$input || empty($input['userid']) || empty($input['passkey'])) {
+match (true) {
+
+    // =================================================================
+    // LOGIN
+    // =================================================================
+    $method === 'POST' && $path === 'auth/login' => (function () {
+        $payload = json_decode(file_get_contents('php://input'), true);
+        if (!is_array($payload) || empty($payload['userid']) || empty($payload['passkey'])) {
             Helpers::sendFeedback('Username and password required', 400);
         }
         try {
-            $result = Auth::login($input['userid'], $input['passkey']);
+            $result = Auth::login($payload['userid'], $payload['passkey']);
             echo json_encode($result);
         } catch (Exception $e) {
-            Helpers::sendFeedback('Login failed', 401);
+            Helpers::sendFeedback('Invalid credentials', 401);
         }
-        break;
+    })(),
 
-    case 'auth/refresh':
-        $input = json_decode(file_get_contents('php://input'), true);
-        $refreshToken = $input['refresh_token'] ?? '';
-        if (empty($refreshToken)) {
+    // =================================================================
+    // REFRESH TOKEN
+    // =================================================================
+    $method === 'POST' && $path === 'auth/refresh' => (function () {
+        $payload = json_decode(file_get_contents('php://input'), true);
+        $refreshToken = $payload['refresh_token'] ?? '';
+        if ($refreshToken === '') {
             Helpers::sendFeedback('Refresh token required', 400);
         }
         try {
@@ -43,21 +49,22 @@ switch ($path) {
         } catch (Exception $e) {
             Helpers::sendFeedback('Invalid or expired refresh token', 401);
         }
-        break;
+    })(),
 
-    case 'auth/logout':
-        $input = json_decode(file_get_contents('php://input'), true);
-        $refreshToken = $input['refresh_token'] ?? '';
-        if (empty($refreshToken)) {
+    // =================================================================
+    // LOGOUT
+    // =================================================================
+    $method === 'POST' && $path === 'auth/logout' => (function () {
+        $payload = json_decode(file_get_contents('php://input'), true);
+        $refreshToken = $payload['refresh_token'] ?? '';
+        if ($refreshToken === '') {
             Helpers::sendFeedback('Refresh token required', 400);
         }
-        try {
-            Auth::logout($refreshToken);
-        } catch (Exception $e) {
-            Helpers::sendFeedback('Logout failed', 500);
-        }
-        break;
+        Auth::logout($refreshToken);
+    })(),
 
-    default:
-        Helpers::sendFeedback('Endpoint not found', 404);
-}
+    // =================================================================
+    // FALLBACK
+    // =================================================================
+    default => Helpers::sendFeedback('Auth endpoint not found', 404),
+};

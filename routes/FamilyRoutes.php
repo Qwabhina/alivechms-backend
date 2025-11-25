@@ -1,95 +1,112 @@
 <?php
 
 /**
- * Family API Routes
+ * Family API Routes – v1
  *
- * Handles all family-related endpoints:
- * - Create, update, delete families
- * - Retrieve single family or paginated list
- * - Add/remove members and update member roles
+ * Complete family unit management with member lifecycle:
+ * - Create family with head of household
+ * - Update family details
+ * - Soft-delete family
+ * - View single family with all members
+ * - Paginated listing with filtering
+ * - Add/remove/update member roles
  *
- * @package AliveChMS\Routes
- * @version 1.0.0
- * @author  Benjamin Ebo Yankson
- * @since   2025-11-20
+ * All operations fully permission-controlled and auditable.
+ *
+ * @package  AliveChMS\Routes
+ * @version  1.0.0
+ * @author   Benjamin Ebo Yankson
+ * @since    2025-November
  */
+
+declare(strict_types=1);
 
 require_once __DIR__ . '/../core/Family.php';
 
-// All family routes require authentication
-if (!$token || !Auth::verify($token)) {
+// ---------------------------------------------------------------------
+// AUTHENTICATION & AUTHORIZATION
+// ---------------------------------------------------------------------
+$token = Auth::getBearerToken();
+if (!$token || Auth::verify($token) === false) {
     Helpers::sendFeedback('Unauthorized: Valid token required', 401);
 }
 
-switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
+// ---------------------------------------------------------------------
+// ROUTE DISPATCHER
+// ---------------------------------------------------------------------
+match (true) {
 
-    // Create a new family
-    case 'POST family/create':
+    // =================================================================
+    // CREATE FAMILY
+    // =================================================================
+    $method === 'POST' && $path === 'family/create' => (function () use ($token) {
         Auth::checkPermission($token, 'manage_families');
-        $input = json_decode(file_get_contents('php://input'), true);
-        if (!$input) {
+
+        $payload = json_decode(file_get_contents('php://input'), true);
+        if (!is_array($payload)) {
             Helpers::sendFeedback('Invalid JSON payload', 400);
         }
-        try {
-            $result = Family::create($input);
-            echo json_encode($result);
-        } catch (Exception $e) {
-            Helpers::sendFeedback($e->getMessage(), 400);
-        }
-        break;
 
-    // Update family details
-    case 'PUT family/update':
+        $result = Family::create($payload);
+        echo json_encode($result);
+    })(),
+
+    // =================================================================
+    // UPDATE FAMILY
+    // =================================================================
+    $method === 'PUT' && $pathParts[0] === 'family' && ($pathParts[1] ?? '') === 'update' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
         Auth::checkPermission($token, 'manage_families');
-        $familyId = $pathParts[2] ?? null;
-        if (!$familyId || !is_numeric($familyId)) {
+
+        $familyId = $pathParts[2];
+        if (!is_numeric($familyId)) {
             Helpers::sendFeedback('Valid Family ID required', 400);
         }
-        $input = json_decode(file_get_contents('php://input'), true);
-        if (!$input) {
+
+        $payload = json_decode(file_get_contents('php://input'), true);
+        if (!is_array($payload)) {
             Helpers::sendFeedback('Invalid JSON payload', 400);
         }
-        try {
-            $result = Family::update((int)$familyId, $input);
-            echo json_encode($result);
-        } catch (Exception $e) {
-            Helpers::sendFeedback($e->getMessage(), 400);
-        }
-        break;
 
-    // Soft delete a family
-    case 'DELETE family/delete':
+        $result = Family::update((int)$familyId, $payload);
+        echo json_encode($result);
+    })(),
+
+    // =================================================================
+    // DELETE FAMILY
+    // =================================================================
+    $method === 'DELETE' && $pathParts[0] === 'family' && ($pathParts[1] ?? '') === 'delete' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
         Auth::checkPermission($token, 'manage_families');
-        $familyId = $pathParts[2] ?? null;
-        if (!$familyId || !is_numeric($familyId)) {
+
+        $familyId = $pathParts[2];
+        if (!is_numeric($familyId)) {
             Helpers::sendFeedback('Valid Family ID required', 400);
         }
-        try {
-            $result = Family::delete((int)$familyId);
-            echo json_encode($result);
-        } catch (Exception $e) {
-            Helpers::sendFeedback($e->getMessage(), 400);
-        }
-        break;
 
-    // Retrieve a single family with members
-    case 'GET family/view':
+        $result = Family::delete((int)$familyId);
+        echo json_encode($result);
+    })(),
+
+    // =================================================================
+    // VIEW SINGLE FAMILY
+    // =================================================================
+    $method === 'GET' && $pathParts[0] === 'family' && ($pathParts[1] ?? '') === 'view' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
         Auth::checkPermission($token, 'view_families');
-        $familyId = $pathParts[2] ?? null;
-        if (!$familyId || !is_numeric($familyId)) {
+
+        $familyId = $pathParts[2];
+        if (!is_numeric($familyId)) {
             Helpers::sendFeedback('Valid Family ID required', 400);
         }
-        try {
-            $family = Family::get((int)$familyId);
-            echo json_encode($family);
-        } catch (Exception $e) {
-            Helpers::sendFeedback($e->getMessage(), 404);
-        }
-        break;
 
-    // Retrieve paginated list of families
-    case 'GET family/all':
+        $family = Family::get((int)$familyId);
+        echo json_encode($family);
+    })(),
+
+    // =================================================================
+    // LIST ALL FAMILIES (Paginated + Filtered)
+    // =================================================================
+    $method === 'GET' && $path === 'family/all' => (function () use ($token) {
         Auth::checkPermission($token, 'view_families');
+
         $page   = max(1, (int)($_GET['page'] ?? 1));
         $limit  = max(1, min(100, (int)($_GET['limit'] ?? 10)));
         $filters = [];
@@ -101,69 +118,69 @@ switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
             $filters['name'] = trim($_GET['name']);
         }
 
-        try {
-            $result = Family::getAll($page, $limit, $filters);
-            echo json_encode($result);
-        } catch (Exception $e) {
-            Helpers::sendFeedback('Failed to retrieve families', 400);
-        }
-        break;
+        $result = Family::getAll($page, $limit, $filters);
+        echo json_encode($result);
+    })(),
 
-    // Add a member to a family
-    case 'POST family/addMember':
+    // =================================================================
+    // ADD MEMBER TO FAMILY
+    // =================================================================
+    $method === 'POST' && $pathParts[0] === 'family' && ($pathParts[1] ?? '') === 'addMember' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
         Auth::checkPermission($token, 'manage_families');
-        $familyId = $pathParts[2] ?? null;
-        if (!$familyId || !is_numeric($familyId)) {
+
+        $familyId = $pathParts[2];
+        if (!is_numeric($familyId)) {
             Helpers::sendFeedback('Valid Family ID required', 400);
         }
-        $input = json_decode(file_get_contents('php://input'), true);
-        if (!$input || empty($input['member_id']) || empty($input['role'])) {
+
+        $payload = json_decode(file_get_contents('php://input'), true);
+        if (!is_array($payload) || empty($payload['member_id']) || empty($payload['role'])) {
             Helpers::sendFeedback('member_id and role are required', 400);
         }
-        try {
-            $result = Family::addMember((int)$familyId, $input);
-            echo json_encode($result);
-        } catch (Exception $e) {
-            Helpers::sendFeedback($e->getMessage(), 400);
-        }
-        break;
 
-    // Remove a member from a family
-    case 'DELETE family/removeMember':
+        $result = Family::addMember((int)$familyId, $payload);
+        echo json_encode($result);
+    })(),
+
+    // =================================================================
+    // REMOVE MEMBER FROM FAMILY
+    // =================================================================
+    $method === 'DELETE' && $pathParts[0] === 'family' && ($pathParts[1] ?? '') === 'removeMember' && isset($pathParts[2], $pathParts[3]) => (function () use ($token, $pathParts) {
         Auth::checkPermission($token, 'manage_families');
-        $familyId = $pathParts[2] ?? null;
-        $memberId = $pathParts[3] ?? null;
-        if (!$familyId || !is_numeric($familyId) || !$memberId || !is_numeric($memberId)) {
+
+        $familyId = $pathParts[2];
+        $memberId = $pathParts[3];
+        if (!is_numeric($familyId) || !is_numeric($memberId)) {
             Helpers::sendFeedback('Valid Family ID and Member ID required', 400);
         }
-        try {
-            $result = Family::removeMember((int)$familyId, (int)$memberId);
-            echo json_encode($result);
-        } catch (Exception $e) {
-            Helpers::sendFeedback($e->getMessage(), 400);
-        }
-        break;
 
-    // Update a member's role in a family
-    case 'PUT family/updateMemberRole':
+        $result = Family::removeMember((int)$familyId, (int)$memberId);
+        echo json_encode($result);
+    })(),
+
+    // =================================================================
+    // UPDATE MEMBER ROLE IN FAMILY
+    // =================================================================
+    $method === 'PUT' && $pathParts[0] === 'family' && ($pathParts[1] ?? '') === 'updateMemberRole' && isset($pathParts[2], $pathParts[3]) => (function () use ($token, $pathParts) {
         Auth::checkPermission($token, 'manage_families');
-        $familyId = $pathParts[2] ?? null;
-        $memberId = $pathParts[3] ?? null;
-        if (!$familyId || !is_numeric($familyId) || !$memberId || !is_numeric($memberId)) {
+
+        $familyId = $pathParts[2];
+        $memberId = $pathParts[3];
+        if (!is_numeric($familyId) || !is_numeric($memberId)) {
             Helpers::sendFeedback('Valid Family ID and Member ID required', 400);
         }
-        $input = json_decode(file_get_contents('php://input'), true);
-        if (!$input || empty($input['role'])) {
-            Helpers::sendFeedback('role is required', 400);
-        }
-        try {
-            $result = Family::updateMemberRole((int)$familyId, (int)$memberId, $input);
-            echo json_encode($result);
-        } catch (Exception $e) {
-            Helpers::sendFeedback($e->getMessage(), 400);
-        }
-        break;
 
-    default:
-        Helpers::sendFeedback('Endpoint not found', 404);
-}
+        $payload = json_decode(file_get_contents('php://input'), true);
+        if (!is_array($payload) || empty($payload['role'])) {
+            Helpers::sendFeedback('Role is required', 400);
+        }
+
+        $result = Family::updateMemberRole((int)$familyId, (int)$memberId, $payload);
+        echo json_encode($result);
+    })(),
+
+    // =================================================================
+    // FALLBACK
+    // =================================================================
+    default => Helpers::sendFeedback('Family endpoint not found', 404),
+};

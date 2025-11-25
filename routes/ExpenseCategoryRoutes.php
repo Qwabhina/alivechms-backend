@@ -1,79 +1,112 @@
 <?php
 
 /**
- * Expense Category API Routes
- * This file handles the routing for expense category management, including creation, updating, deletion, and retrieval.
- * It checks for authentication and permissions before processing requests.
- * It uses the ExpenseCategory model for database interactions and returns JSON responses.
- * Requires authentication via a Bearer token and appropriate permissions.
+ * Expense Category API Routes – v1
+ *
+ * Complete taxonomy management for expense classification:
+ *
+ * PURPOSE IN THE CHURCH
+ * • Enables accurate financial reporting by ministry area
+ * • Critical for budgeting, auditing, and stewardship transparency
+ * • Examples: Tithes & Offerings, Missions, Building Maintenance, Staff Salaries
+ *
+ * BUSINESS RULES
+ * • Category names must be unique system-wide
+ * • Cannot delete a category currently used in any expense
+ * • Simple, clean, high-performance CRUD
+ *
+ * "Moreover it is required of stewards that they be found faithful." — 1 Corinthians 4:2
+ *
+ * This is the foundation of trustworthy financial stewardship.
+ *
+ * @package  AliveChMS\Routes
+ * @version  1.0.0
+ * @author   Benjamin Ebo Yankson
+ * @since    2025-November
  */
-if (!$token || !Auth::verify($token)) Helpers::sendFeedback('Unauthorized', 401);
 
-switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
-   case 'POST expensecategory/create':
-      Auth::checkPermission($token, 'manage_expense_categories');
-      $input = json_decode(file_get_contents('php://input'), true);
-      try {
-         $result = ExpenseCategory::create($input);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::sendFeedback($e->getMessage(), 400);
-      }
-      break;
+declare(strict_types=1);
 
-   case 'PUT expensecategory/update':
-      Auth::checkPermission($token, 'manage_expense_categories');
-      $categoryId = $pathParts[2] ?? null;
-      if (!$categoryId) {
-         Helpers::sendFeedback('Category ID required', 400);
-      }
-      $input = json_decode(file_get_contents('php://input'), true);
-      try {
-         $result = ExpenseCategory::update($categoryId, $input);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::sendFeedback($e->getMessage(), 400);
-      }
-      break;
+require_once __DIR__ . '/../core/ExpenseCategory.php';
 
-   case 'DELETE expensecategory/delete':
-      Auth::checkPermission($token, 'manage_expense_categories');
-      $categoryId = $pathParts[2] ?? null;
-      if (!$categoryId) {
-         Helpers::sendFeedback('Category ID required', 400);
-      }
-      try {
-         $result = ExpenseCategory::delete($categoryId);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::sendFeedback($e->getMessage(), 400);
-      }
-      break;
-
-   case 'GET expensecategory/view':
-      Auth::checkPermission($token, 'view_expense');
-      $categoryId = $pathParts[2] ?? null;
-      if (!$categoryId) {
-         Helpers::sendFeedback('Category ID required', 400);
-      }
-      try {
-         $category = ExpenseCategory::get($categoryId);
-         echo json_encode($category);
-      } catch (Exception $e) {
-         Helpers::sendFeedback($e->getMessage(), 404);
-      }
-      break;
-
-   case 'GET expensecategory/all':
-      Auth::checkPermission($token, 'view_expense');
-      try {
-         $categories = ExpenseCategory::getAll();
-         echo json_encode($categories);
-      } catch (Exception $e) {
-         Helpers::sendFeedback($e->getMessage(), 400);
-      }
-      break;
-
-   default:
-      Helpers::sendFeedback('Endpoint not found', 404);
+// ---------------------------------------------------------------------
+// AUTHENTICATION & AUTHORIZATION
+// ---------------------------------------------------------------------
+$token = Auth::getBearerToken();
+if (!$token || Auth::verify($token) === false) {
+   Helpers::sendFeedback('Unauthorized: Valid token required', 401);
 }
+
+// ---------------------------------------------------------------------
+// ROUTE DISPATCHER
+// ---------------------------------------------------------------------
+match (true) {
+
+   // CREATE EXPENSE CATEGORY
+   $method === 'POST' && $path === 'expensecategory/create' => (function () use ($token) {
+      Auth::checkPermission($token, 'manage_expense_categories');
+
+      $payload = json_decode(file_get_contents('php://input'), true);
+      if (!is_array($payload)) {
+         Helpers::sendFeedback('Invalid JSON payload', 400);
+      }
+
+      $result = ExpenseCategory::create($payload);
+      echo json_encode($result);
+   })(),
+
+   // UPDATE EXPENSE CATEGORY
+   $method === 'PUT' && $pathParts[0] === 'expensecategory' && ($pathParts[1] ?? '') === 'update' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
+      Auth::checkPermission($token, 'manage_expense_categories');
+
+      $categoryId = $pathParts[2];
+      if (!is_numeric($categoryId)) {
+         Helpers::sendFeedback('Valid Category ID required', 400);
+      }
+
+      $payload = json_decode(file_get_contents('php://input'), true);
+      if (!is_array($payload)) {
+         Helpers::sendFeedback('Invalid JSON payload', 400);
+      }
+
+      $result = ExpenseCategory::update((int)$categoryId, $payload);
+      echo json_encode($result);
+   })(),
+
+   // DELETE EXPENSE CATEGORY
+   $method === 'DELETE' && $pathParts[0] === 'expensecategory' && ($pathParts[1] ?? '') === 'delete' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
+      Auth::checkPermission($token, 'manage_expense_categories');
+
+      $categoryId = $pathParts[2];
+      if (!is_numeric($categoryId)) {
+         Helpers::sendFeedback('Valid Category ID required', 400);
+      }
+
+      $result = ExpenseCategory::delete((int)$categoryId);
+      echo json_encode($result);
+   })(),
+
+   // VIEW SINGLE EXPENSE CATEGORY
+   $method === 'GET' && $pathParts[0] === 'expensecategory' && ($pathParts[1] ?? '') === 'view' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
+      Auth::checkPermission($token, 'view_expense');
+
+      $categoryId = $pathParts[2];
+      if (!is_numeric($categoryId)) {
+         Helpers::sendFeedback('Valid Category ID required', 400);
+      }
+
+      $category = ExpenseCategory::get((int)$categoryId);
+      echo json_encode($category);
+   })(),
+
+   // LIST ALL EXPENSE CATEGORIES
+   $method === 'GET' && $path === 'expensecategory/all' => (function () use ($token) {
+      Auth::checkPermission($token, 'view_expense');
+
+      $result = ExpenseCategory::getAll();
+      echo json_encode($result);
+   })(),
+
+   // FALLBACK
+   default => Helpers::sendFeedback('ExpenseCategory endpoint not found', 404),
+};

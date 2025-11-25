@@ -1,147 +1,183 @@
 <?php
 
 /**
- * Membership Type API Routes
- * This file handles membership type-related API routes for the AliveChMS backend.
- * It includes routes for creating, updating, deleting, viewing, and listing membership types,
- * as well as assigning types to members, updating assignments, and retrieving member assignments.
- * It uses the MembershipType class for business logic and the Auth class for permission checks.
+ * Membership Type & Assignment API Routes – v1
+ *
+ * Complete church membership tier system with lifecycle management:
+ *
+ * MEMBERSHIP TYPES (e.g., Full Member, Associate, New Convert, Child)
+ * • Full CRUD with uniqueness enforcement
+ * • Deletion protection when assigned to members
+ * • Clean taxonomy for reporting and permissions
+ *
+ * MEMBER ASSIGNMENTS
+ * • One active membership per member at a time (strict rule)
+ * • Start/end dates with overlap prevention
+ * • Historical tracking for life-stage analysis
+ * • Bulk and single retrieval with status filtering
+ *
+ * Business Rules Enforced:
+ * • Only one active membership assignment per member
+ * • Cannot assign overlapping date ranges
+ * • Cannot delete a type currently in use
+ * • End date must be after start date
+ *
+ * Essential for:
+ * • Membership ceremonies & reporting
+ * • Voting rights and leadership eligibility
+ * • Spiritual growth tracking
+ * • Annual church census
+ *
+ * @package  AliveChMS\Routes
+ * @version  1.0.0
+ * @author   Benjamin Ebo Yankson
+ * @since    2025-November
  */
+
+declare(strict_types=1);
+
 require_once __DIR__ . '/../core/MembershipType.php';
 
-if (!$token || !Auth::verify($token))  Helpers::sendFeedback('Unauthorized', 401);
+// ---------------------------------------------------------------------
+// AUTHENTICATION & AUTHORIZATION
+// ---------------------------------------------------------------------
+$token = Auth::getBearerToken();
+if (!$token || Auth::verify($token) === false) {
+   Helpers::sendFeedback('Unauthorized: Valid token required', 401);
+}
 
-switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
-   case 'POST membershiptype/create':
-      // Auth::checkPermission($token, 'manage_membership_types');
+// ---------------------------------------------------------------------
+// ROUTE DISPATCHER
+// ---------------------------------------------------------------------
+match (true) {
 
-      $input = json_decode(file_get_contents('php://input'), true);
-      try {
-         $result = MembershipType::create($input);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::logError('MembershipType create error: ' . $e->getMessage());
-         Helpers::sendFeedback($e->getMessage(), 400);
+   // CREATE MEMBERSHIP TYPE
+   $method === 'POST' && $path === 'membershiptype/create' => (function () use ($token) {
+      Auth::checkPermission($token, 'manage_membership_types');
+
+      $payload = json_decode(file_get_contents('php://input'), true);
+      if (!is_array($payload)) {
+         Helpers::sendFeedback('Invalid JSON payload', 400);
       }
-      break;
 
-   case 'POST membershiptype/update':
-      // Auth::checkPermission($token, 'manage_membership_types');
+      $result = MembershipType::create($payload);
+      echo json_encode($result);
+   })(),
 
-      $typeId = $pathParts[2] ?? null;
-      if (!$typeId) Helpers::sendFeedback('Membership type ID required', 400);
+   // UPDATE MEMBERSHIP TYPE
+   $method === 'POST' && $pathParts[0] === 'membershiptype' && ($pathParts[1] ?? '') === 'update' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
+      Auth::checkPermission($token, 'manage_membership_types');
 
-      $input = json_decode(file_get_contents('php://input'), true);
-      try {
-         $result = MembershipType::update($typeId, $input);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::logError('MembershipType update error: ' . $e->getMessage());
-         Helpers::sendFeedback($e->getMessage(), 400);
+      $typeId = $pathParts[2];
+      if (!is_numeric($typeId)) {
+         Helpers::sendFeedback('Valid Membership Type ID required', 400);
       }
-      break;
 
-   case 'POST membershiptype/delete':
-      // Auth::checkPermission($token, 'manage_membership_types');
-
-      $typeId = $pathParts[2] ?? null;
-      if (!$typeId) Helpers::sendFeedback('Membership type ID required', 400);
-
-      try {
-         $result = MembershipType::delete($typeId);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::logError('MembershipType delete error: ' . $e->getMessage());
-         Helpers::sendFeedback($e->getMessage(), 400);
+      $payload = json_decode(file_get_contents('php://input'), true);
+      if (!is_array($payload)) {
+         Helpers::sendFeedback('Invalid JSON payload', 400);
       }
-      break;
 
-   case 'GET membershiptype/view':
-      // Auth::checkPermission($token, 'view_membership_types');
+      $result = MembershipType::update((int)$typeId, $payload);
+      echo json_encode($result);
+   })(),
 
-      $typeId = $pathParts[2] ?? null;
-      if (!$typeId) Helpers::sendFeedback('Membership type ID required', 400);
+   // DELETE MEMBERSHIP TYPE
+   $method === 'POST' && $pathParts[0] === 'membershiptype' && ($pathParts[1] ?? '') === 'delete' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
+      Auth::checkPermission($token, 'manage_membership_types');
 
-      try {
-         $type = MembershipType::get($typeId);
-         echo json_encode($type);
-      } catch (Exception $e) {
-         Helpers::logError('MembershipType get error: ' . $e->getMessage());
-         Helpers::sendFeedback($e->getMessage(), 404);
+      $typeId = $pathParts[2];
+      if (!is_numeric($typeId)) {
+         Helpers::sendFeedback('Valid Membership Type ID required', 400);
       }
-      break;
 
-   case 'GET membershiptype/all':
-      // Auth::checkPermission($token, 'view_membership_types');
+      $result = MembershipType::delete((int)$typeId);
+      echo json_encode($result);
+   })(),
 
-      $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
-      $limit = isset($_GET['limit']) ? max(1, min(100, intval($_GET['limit']))) : 10;
+   // VIEW SINGLE MEMBERSHIP TYPE
+   $method === 'GET' && $pathParts[0] === 'membershiptype' && ($pathParts[1] ?? '') === 'view' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
+      Auth::checkPermission($token, 'view_membership_types');
+
+      $typeId = $pathParts[2];
+      if (!is_numeric($typeId)) {
+         Helpers::sendFeedback('Valid Membership Type ID required', 400);
+      }
+
+      $type = MembershipType::get((int)$typeId);
+      echo json_encode($type);
+   })(),
+
+   // LIST ALL MEMBERSHIP TYPES (Paginated + Search)
+   $method === 'GET' && $path === 'membershiptype/all' => (function () use ($token) {
+      Auth::checkPermission($token, 'view_membership_types');
+
+      $page  = max(1, (int)($_GET['page'] ?? 1));
+      $limit = max(1, min(100, (int)($_GET['limit'] ?? 10)));
+
       $filters = [];
-
-      if (isset($_GET['name'])) $filters['name'] = $_GET['name'];
-
-      try {
-         $result = MembershipType::getAll($page, $limit, $filters);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::logError('MembershipType getAll error: ' . $e->getMessage());
-         Helpers::sendFeedback($e->getMessage(), 400);
+      if (!empty($_GET['name'])) {
+         $filters['name'] = trim($_GET['name']);
       }
-      break;
 
-   case 'POST membershiptype/assign':
-      // Auth::checkPermission($token, 'manage_membership_types');
+      $result = MembershipType::getAll($page, $limit, $filters);
+      echo json_encode($result);
+   })(),
 
-      $memberId = $pathParts[2] ?? null;
-      if (!$memberId) Helpers::sendFeedback('Member ID required', 400);
+   // ASSIGN MEMBERSHIP TYPE TO MEMBER
+   $method === 'POST' && $pathParts[0] === 'membershiptype' && ($pathParts[1] ?? '') === 'assign' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
+      Auth::checkPermission($token, 'manage_membership_types');
 
-      $input = json_decode(file_get_contents('php://input'), true);
-      try {
-         $result = MembershipType::assign($memberId, $input);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::logError('MembershipType assign error: ' . $e->getMessage());
-         Helpers::sendFeedback($e->getMessage(), 400);
+      $memberId = $pathParts[2];
+      if (!is_numeric($memberId)) {
+         Helpers::sendFeedback('Valid Member ID required', 400);
       }
-      break;
 
-   case 'POST membershiptype/updateAssignment':
-      // Auth::checkPermission($token, 'manage_membership_types');
-
-      $assignmentId = $pathParts[2] ?? null;
-      if (!$assignmentId) Helpers::sendFeedback('Assignment ID required', 400);
-
-      $input = json_decode(file_get_contents('php://input'), true);
-      try {
-         $result = MembershipType::updateAssignment($assignmentId, $input);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::logError('MembershipType updateAssignment error: ' . $e->getMessage());
-         Helpers::sendFeedback($e->getMessage(), 400);
+      $payload = json_decode(file_get_contents('php://input'), true);
+      if (!is_array($payload)) {
+         Helpers::sendFeedback('Invalid JSON payload', 400);
       }
-      break;
 
-   case 'GET membershiptype/memberassignments':
-      // Auth::checkPermission($token, 'view_membership_types');
+      $result = MembershipType::assign((int)$memberId, $payload);
+      echo json_encode($result);
+   })(),
 
-      $memberId = $pathParts[2] ?? null;
-      if (!$memberId) Helpers::sendFeedback('Member ID required', 400);
+   // UPDATE MEMBERSHIP ASSIGNMENT (e.g., set end date)
+   $method === 'POST' && $pathParts[0] === 'membershiptype' && ($pathParts[1] ?? '') === 'updateAssignment' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
+      Auth::checkPermission($token, 'manage_membership_types');
+
+      $assignmentId = $pathParts[2];
+      if (!is_numeric($assignmentId)) {
+         Helpers::sendFeedback('Valid Assignment ID required', 400);
+      }
+
+      $payload = json_decode(file_get_contents('php://input'), true);
+      if (!is_array($payload)) {
+         Helpers::sendFeedback('Invalid JSON payload', 400);
+      }
+
+      $result = MembershipType::updateAssignment((int)$assignmentId, $payload);
+      echo json_encode($result);
+   })(),
+
+   // GET MEMBER'S MEMBERSHIP HISTORY
+   $method === 'GET' && $pathParts[0] === 'membershiptype' && ($pathParts[1] ?? '') === 'memberassignments' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
+      Auth::checkPermission($token, 'view_membership_types');
+
+      $memberId = $pathParts[2];
+      if (!is_numeric($memberId)) {
+         Helpers::sendFeedback('Valid Member ID required', 400);
+      }
 
       $filters = [];
       if (isset($_GET['active']) && $_GET['active'] === 'true') $filters['active'] = true;
-      if (isset($_GET['start_date'])) $filters['start_date'] = $_GET['start_date'];
-      if (isset($_GET['end_date'])) $filters['end_date'] = $_GET['end_date'];
+      if (!empty($_GET['start_date'])) $filters['start_date'] = $_GET['start_date'];
+      if (!empty($_GET['end_date']))   $filters['end_date']   = $_GET['end_date'];
 
-      try {
-         $result = MembershipType::getMemberAssignments($memberId, $filters);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::logError('MembershipType getMemberAssignments error: ' . $e->getMessage());
-         Helpers::sendFeedback($e->getMessage(), 400);
-      }
-      break;
+      $result = MembershipType::getMemberAssignments((int)$memberId, $filters);
+      echo json_encode($result);
+   })(),
 
-   default:
-      Helpers::sendFeedback('Request Malformed', 405);
-      break;
-}
+   // FALLBACK
+   default => Helpers::sendFeedback('MembershipType endpoint not found', 404),
+};
