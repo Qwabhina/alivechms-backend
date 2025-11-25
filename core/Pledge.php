@@ -138,6 +138,103 @@ class Pledge
    }
 
    /**
+    * Update an existing pledge
+    *
+    * Allowed fields:
+    * - amount (only if no payments recorded)
+    * - pledge_date, due_date
+    * - description
+    * - pledge_type_id
+    *
+    * Prevents changes that would corrupt financial integrity.
+    *
+    * @param int   $pledgeId Pledge ID
+    * @param array $data     Updated fields
+    * @return array Success response
+    * @throws Exception On validation or business rule violation
+    */
+   public static function update(int $pledgeId, array $data): array
+   {
+      $orm = new ORM();
+
+      $pledge = $orm->getWhere('pledge', ['PledgeID' => $pledgeId])[0] ?? null;
+      if (!$pledge) {
+         Helpers::sendFeedback('Pledge not found', 404);
+      }
+
+      if ($pledge['PledgeStatus'] === self::STATUS_FULFILLED) {
+         Helpers::sendFeedback('Cannot modify a fulfilled pledge', 400);
+      }
+
+      if ($pledge['PledgeStatus'] === self::STATUS_CANCELLED) {
+         Helpers::sendFeedback('Cannot modify a cancelled pledge', 400);
+      }
+
+      $update = [];
+
+      // Amount can only be changed if no payments exist
+      if (isset($data['amount'])) {
+         $newAmount = (float)$data['amount'];
+         if ($newAmount <= 0) {
+            Helpers::sendFeedback('Pledge amount must be greater than zero', 400);
+         }
+
+         $paid = $orm->runQuery(
+            "SELECT COALESCE(SUM(PaymentAmount), 0) AS paid FROM pledge_payment WHERE PledgeID = :id",
+            [':id' => $pledgeId]
+         )[0]['paid'];
+
+         if ($paid > 0 && $newAmount < $paid) {
+            Helpers::sendFeedback('Cannot reduce amount below total paid', 400);
+         }
+
+         $update['PledgeAmount'] = $newAmount;
+      }
+
+      if (!empty($data['pledge_date'])) {
+         $update['PledgeDate'] = $data['pledge_date'];
+      }
+
+      if (isset($data['due_date'])) {
+         $update['DueDate'] = $data['due_date'] === '' ? null : $data['due_date'];
+      }
+
+      if (isset($data['description'])) {
+         $update['Description'] = $data['description'] ?? null;
+      }
+
+      if (!empty($data['pledge_type_id'])) {
+         $typeExists = $orm->getWhere('pledge_type', ['PledgeTypeID' => (int)$data['pledge_type_id']]);
+         if (empty($typeExists)) {
+            Helpers::sendFeedback('Invalid pledge type', 400);
+         }
+         $update['PledgeTypeID'] = (int)$data['pledge_type_id'];
+      }
+
+      if (empty($update)) {
+         return ['status' => 'success', 'message' => 'No changes applied', 'pledge_id' => $pledgeId];
+      }
+
+      $orm->update('pledge', $update, ['PledgeID' => $pledgeId]);
+
+      // Re-check fulfillment status after amount change
+      if (isset($update['PledgeAmount'])) {
+         $paid = $orm->runQuery(
+            "SELECT COALESCE(SUM(PaymentAmount), 0) AS paid FROM pledge_payment WHERE PledgeID = :id",
+            [':id' => $pledgeId]
+         )[0]['paid'];
+
+         $newStatus = ($paid >= $update['PledgeAmount']) ? self::STATUS_FULFILLED : self::STATUS_ACTIVE;
+         if ($pledge['PledgeStatus'] !== $newStatus) {
+            $orm->update('pledge', ['PledgeStatus' => $newStatus], ['PledgeID' => $pledgeId]);
+         }
+      }
+
+      Helpers::logError("Pledge updated: PledgeID $pledgeId");
+      return ['status' => 'success', 'pledge_id' => $pledgeId];
+   }
+
+   /**
     * Retrieve a single pledge with payment progress
     *
     * @param int $pledgeId Pledge ID
