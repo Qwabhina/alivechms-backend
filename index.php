@@ -56,7 +56,8 @@ if (str_contains($path, '..') || str_contains($path, "\0")) {
 }
 
 if ($path === '') {
-    Helpers::sendFeedback('Welcome to AliveChMS API v1.0', 200, 'success');
+    header('Location: /public');
+    exit;
 }
 
 $pathParts = $path !== '' ? explode('/', $path) : [];
