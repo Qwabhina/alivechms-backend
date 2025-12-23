@@ -257,12 +257,12 @@ class Member
                 ['table' => 'family f',       'on' => 'c.FamilyID = f.FamilyID', 'type' => 'LEFT']
             ],
             fields: [
-                'c.MbrID',
-                'c.MbrFirstName',
-                'c.MbrFamilyName',
-                'c.MbrEmailAddress',
-                'c.MbrMembershipStatus',
-                'c.MbrRegistrationDate',
+                'c.*',
+                // 'c.MbrFirstName',
+                // 'c.MbrFamilyName',
+                // 'c.MbrEmailAddress',
+                // 'c.MbrMembershipStatus',
+                // 'c.MbrRegistrationDate',
                 "GROUP_CONCAT(DISTINCT p.PhoneNumber ORDER BY p.IsPrimary DESC SEPARATOR ', ') AS PhoneNumbers",
                 'f.FamilyName'
             ],
