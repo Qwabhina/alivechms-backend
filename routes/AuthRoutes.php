@@ -23,14 +23,15 @@ match (true) {
     // =================================================================
     $method === 'POST' && $path === 'auth/login' => (function () {
         $payload = json_decode(file_get_contents('php://input'), true);
-        if (!is_array($payload) || empty($payload['userid']) || empty($payload['passkey'])) {
-            Helpers::sendFeedback('Username and password required', 400);
-        }
+
+        if (!is_array($payload) || empty($payload['userid']) || empty($payload['passkey'])) Helpers::sendError('Username and password required', 400);
+
         try {
             $result = Auth::login($payload['userid'], $payload['passkey']);
             echo json_encode($result);
         } catch (Exception $e) {
-            Helpers::sendFeedback('Invalid credentials', 401);
+            Helpers::logError("Login failed for user {$payload['userid']}: " . $e->getMessage());
+            Helpers::sendError('Invalid credentials', 401);
         }
     })(),
 
@@ -39,15 +40,17 @@ match (true) {
     // =================================================================
     $method === 'POST' && $path === 'auth/refresh' => (function () {
         $payload = json_decode(file_get_contents('php://input'), true);
+
         $refreshToken = $payload['refresh_token'] ?? '';
         if ($refreshToken === '') {
-            Helpers::sendFeedback('Refresh token required', 400);
+            Helpers::sendError('Refresh token required', 400);
         }
         try {
             $result = Auth::refreshAccessToken($refreshToken);
             echo json_encode($result);
         } catch (Exception $e) {
-            Helpers::sendFeedback('Invalid or expired refresh token', 401);
+            Helpers::logError("Token refresh failed: " . $e->getMessage());
+            Helpers::sendError('Invalid or expired refresh token', 401);
         }
     })(),
 
@@ -56,9 +59,10 @@ match (true) {
     // =================================================================
     $method === 'POST' && $path === 'auth/logout' => (function () {
         $payload = json_decode(file_get_contents('php://input'), true);
+
         $refreshToken = $payload['refresh_token'] ?? '';
         if ($refreshToken === '') {
-            Helpers::sendFeedback('Refresh token required', 400);
+            Helpers::sendError('Refresh token required', 400);
         }
         Auth::logout($refreshToken);
     })(),
@@ -66,5 +70,5 @@ match (true) {
     // =================================================================
     // FALLBACK
     // =================================================================
-    default => Helpers::sendFeedback('Auth endpoint not found', 404),
+    default => Helpers::sendError('Auth endpoint not found', 404),
 };

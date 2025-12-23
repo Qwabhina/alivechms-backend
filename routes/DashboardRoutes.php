@@ -39,7 +39,7 @@ match (true) {
 
     // DASHBOARD OVERVIEW
     $method === 'GET' && $path === 'dashboard/overview' => (function () use ($token) {
-        Auth::checkPermission($token, 'view_dashboard');
+        Auth::checkPermission('view_dashboard');
 
         try {
             $overview = Dashboard::getOverview();
