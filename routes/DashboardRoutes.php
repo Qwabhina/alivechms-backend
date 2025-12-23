@@ -38,7 +38,7 @@ if (!$token || Auth::verify($token) === false) {
 match (true) {
 
     // DASHBOARD OVERVIEW
-    $method === 'GET' && $path === 'dashboard/overview' => (function () use ($token) {
+    $method === 'GET' && $path === 'dashboard/overview' => (function () {
         Auth::checkPermission('view_dashboard');
 
         try {

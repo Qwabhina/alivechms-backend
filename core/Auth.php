@@ -339,13 +339,13 @@ class Auth
     public static function refreshAccessToken(string $refreshToken): array
     {
         if (empty($refreshToken)) {
-            throw new Exception('Refresh token required');
+            Helpers::sendError('Refresh token required');
         }
 
         $decoded = self::verify($refreshToken, self::$refreshSecretKey);
 
         if (!$decoded) {
-            throw new Exception('Invalid or expired refresh token');
+            Helpers::sendError('Invalid or expired refresh token');
         }
 
         $orm = new ORM();
@@ -355,14 +355,14 @@ class Auth
         ]);
 
         if (empty($stored)) {
-            throw new Exception('Refresh token revoked or invalid');
+            Helpers::sendError('Refresh token revoked or invalid');
         }
 
         $tokenRecord = $stored[0];
 
         if (strtotime($tokenRecord['expires_at']) < time()) {
             $orm->update('refresh_tokens', ['revoked' => 1], ['id' => $tokenRecord['id']]);
-            throw new Exception('Refresh token expired');
+            Helpers::sendError('Refresh token expired');
         }
 
         // Revoke old refresh token

@@ -41,7 +41,7 @@
             <i class="bi bi-graph-up-arrow text-primary"></i>
          </div>
          <div class="card-body">
-            <canvas id="attendanceChart" height="80"></canvas>
+            <canvas id="attendanceChart" height="180"></canvas>
          </div>
       </div>
    </div>
@@ -54,7 +54,7 @@
             <i class="bi bi-currency-dollar text-success"></i>
          </div>
          <div class="card-body">
-            <canvas id="financeChart"></canvas>
+            <canvas id="financeChart" height="180"></canvas>
             <div class="mt-3">
                <div class="d-flex justify-content-between mb-2">
                   <span class="text-muted">Income:</span>
@@ -176,7 +176,7 @@
       const pending = data.pending_approvals || {};
 
       const cards = [{
-            title: 'Total Members',
+            title: 'Total Active Members',
             value: membership.total || 0,
             change: `+${membership.new_this_month || 0} this month`,
             icon: 'people',
@@ -211,7 +211,7 @@
 
       const html = cards.map(card => `
             <div class="col-lg-3 col-md-6">
-                <div class="card stat-card">
+                <div class="card stat-card bg-${card.color} bg-opacity-25 mb-4">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-start mb-3">
                             <div>
@@ -219,11 +219,11 @@
                                 <h3 class="mb-0">${card.value}</h3>
                                 <small class="text-muted">${card.change}</small>
                             </div>
-                            <div class="stat-icon bg-${card.color} bg-opacity-10 text-${card.color}">
+                            <div class="stat-icon bg-${card.color} text-white text-opacity-50 rounded-circle p-3">
                                 <i class="bi bi-${card.icon}"></i>
                             </div>
                         </div>
-                        <a href="${card.link}" class="btn btn-sm btn-outline-${card.color}">
+                        <a href="${card.link}" class="btn btn-sm btn-${card.color}">
                             View Details <i class="bi bi-arrow-right ms-1"></i>
                         </a>
                     </div>
@@ -313,7 +313,7 @@
             maintainAspectRatio: true,
             plugins: {
                legend: {
-                  position: 'bottom'
+                  position: 'top'
                }
             }
          }
