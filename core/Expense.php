@@ -1,15 +1,15 @@
 <?php
 
 /**
- * Expense Management Class – Full Featured
+ * Expense Management
  *
- * Complete expense lifecycle with approval workflow, categories,
- * fiscal year integration, and audit trail.
+ * Complete expense lifecycle with request, approval workflow,
+ * cancellation, fiscal-year integration, and full audit trail.
  *
- * @package AliveChMS\Core
- * @version 1.0.0
- * @author  Benjamin Ebo Yankson
- * @since   2025-11-21
+ * @package  AliveChMS\Core
+ * @version  1.0.0
+ * @author   Benjamin Ebo Yankson
+ * @since    2025-November
  */
 
 declare(strict_types=1);
@@ -24,8 +24,9 @@ class Expense
    /**
     * Create a new expense request
     *
-    * @param array $data Expense data
-    * @return array Success response with expense_id
+    * @param array $data Expense payload
+    * @return array ['status' => 'success', 'expense_id' => int]
+    * @throws Exception On validation or database failure
     */
    public static function create(array $data): array
    {
@@ -55,9 +56,9 @@ class Expense
          Helpers::sendFeedback('Expense date cannot be in the future', 400);
       }
 
-      // Validate references
+      // Validate foreign keys
       $valid = $orm->runQuery(
-         "SELECT 
+         "SELECT
                 (SELECT COUNT(*) FROM expense_category WHERE ExpenseCategoryID = :cat AND Deleted = 0) AS cat_ok,
                 (SELECT COUNT(*) FROM fiscalyear WHERE FiscalYearID = :fy AND Status = 'Active') AS fy_ok,
                 (SELECT COUNT(*) FROM branch WHERE BranchID = :br) AS br_ok",
@@ -77,22 +78,22 @@ class Expense
          'FiscalYearID'       => $fiscalYearId,
          'BranchID'           => $branchId,
          'ExpenseStatus'      => self::STATUS_PENDING,
-         'RequestedBy'        => Auth::getCurrentUserId($token ?? ''),
+         'RequestedBy'        => Auth::getCurrentUserId(),
          'RequestedAt'        => date('Y-m-d H:i:s')
       ])['id'];
 
       Helpers::logError("New expense request: ExpenseID $expenseId | Amount $amount");
-
       return ['status' => 'success', 'expense_id' => $expenseId];
    }
 
    /**
-    * Approve or reject an expense
+    * Review (approve or reject) an expense
     *
     * @param int    $expenseId Expense ID
     * @param string $action    'approve' or 'reject'
     * @param string|null $remarks Optional remarks
     * @return array Success response
+    * @throws Exception On invalid action or state
     */
    public static function review(int $expenseId, string $action, ?string $remarks = null): array
    {
@@ -107,21 +108,20 @@ class Expense
          Helpers::sendFeedback('Only pending expenses can be reviewed', 400);
       }
 
-      if (!in_array($action, ['approve', 'reject'])) {
+      if (!in_array($action, ['approve', 'reject'], true)) {
          Helpers::sendFeedback('Action must be approve or reject', 400);
       }
 
-      $newStatus = ($action === 'approve') ? self::STATUS_APPROVED : self::STATUS_REJECTED;
+      $newStatus = $action === 'approve' ? self::STATUS_APPROVED : self::STATUS_REJECTED;
 
       $orm->update('expense', [
          'ExpenseStatus'   => $newStatus,
-         'ApprovedBy'      => Auth::getCurrentUserId($token ?? ''),
+         'ApprovedBy'      => Auth::getCurrentUserId(),
          'ApprovedAt'      => date('Y-m-d H:i:s'),
          'ApprovalRemarks' => $remarks
       ], ['ExpenseID' => $expenseId]);
 
       Helpers::logError("Expense {$action}d: ExpenseID $expenseId");
-
       return ['status' => 'success', 'message' => "Expense has been {$action}d"];
    }
 
@@ -135,7 +135,7 @@ class Expense
    {
       $orm = new ORM();
 
-      $expenses = $orm->selectWithJoin(
+      $result = $orm->selectWithJoin(
             baseTable: 'expense e',
             joins: [
             ['table' => 'expense_category ec', 'on' => 'e.ExpenseCategoryID = ec.ExpenseCategoryID'],
@@ -158,11 +158,11 @@ class Expense
             params: [':id' => $expenseId]
       );
 
-      if (empty($expenses)) {
+      if (empty($result)) {
          Helpers::sendFeedback('Expense not found', 404);
       }
 
-      return $expenses[0];
+      return $result[0];
    }
 
    /**
@@ -170,16 +170,16 @@ class Expense
     *
     * @param int   $page    Page number
     * @param int   $limit   Items per page
-    * @param array $filters Filters
+    * @param array $filters Optional filters
     * @return array Paginated result
     */
    public static function getAll(int $page = 1, int $limit = 10, array $filters = []): array
    {
-      $orm = new ORM();
+      $orm    = new ORM();
       $offset = ($page - 1) * $limit;
 
       $conditions = [];
-      $params = [];
+      $params     = [];
 
       if (!empty($filters['fiscal_year_id'])) {
          $conditions['e.FiscalYearID'] = ':fy';
@@ -231,17 +231,18 @@ class Expense
       );
 
       $total = $orm->runQuery(
-         "SELECT COUNT(*) AS total FROM expense e" . ($conditions ? ' WHERE ' . implode(' AND ', array_keys($conditions)) : ''),
+         "SELECT COUNT(*) AS total FROM expense e" .
+            (!empty($conditions) ? ' WHERE ' . implode(' AND ', array_keys($conditions)) : ''),
             $params
       )[0]['total'];
 
       return [
             'data' => $expenses,
             'pagination' => [
-            'page'  => $page,
-            'limit' => $limit,
-            'total' => (int)$total,
-            'pages' => (int)ceil($total / $limit)
+            'page'   => $page,
+            'limit'  => $limit,
+            'total'  => (int)$total,
+            'pages'  => (int)ceil($total / $limit)
             ]
       ];
    }
@@ -249,11 +250,8 @@ class Expense
    /**
     * Cancel a pending expense request
     *
-    * Only pending (not yet approved) expenses can be cancelled.
-    * Approved expenses must be reversed via a separate correcting entry.
-    *
     * @param int    $expenseId Expense ID
-    * @param string $reason    Reason for cancellation (required for audit)
+    * @param string $reason    Reason for cancellation
     * @return array Success response
     */
    public static function cancel(int $expenseId, string $reason): array
@@ -280,15 +278,11 @@ class Expense
       $orm->update('expense', [
          'ExpenseStatus'       => self::STATUS_CANCELLED,
          'CancellationReason'  => $reason,
-         'CancelledBy'         => Auth::getCurrentUserId($token ?? ''),
+         'CancelledBy'         => Auth::getCurrentUserId(),
          'CancelledAt'         => date('Y-m-d H:i:s')
       ], ['ExpenseID' => $expenseId]);
 
       Helpers::logError("Expense cancelled: ExpenseID $expenseId | Reason: $reason");
-
-      return [
-         'status'  => 'success',
-         'message' => 'Expense has been cancelled'
-      ];
+      return ['status' => 'success', 'message' => 'Expense has been cancelled'];
    }
 }

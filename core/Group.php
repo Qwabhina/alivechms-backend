@@ -1,15 +1,15 @@
 <?php
 
 /**
- * Group Management Class
+ * Church Group Management
  *
- * Manages church groups (e.g., choir, youth, ushering) including creation,
- * updates, membership, group types, and internal messaging.
+ * Handles creation, update, deletion, membership management,
+ * and retrieval of church groups (choir, youth, ushering, etc.).
  *
- * @package AliveChMS\Core
- * @version 1.0.0
- * @author  Benjamin Ebo Yankson
- * @since   2025-11-20
+ * @package  AliveChMS\Core
+ * @version  1.0.0
+ * @author   Benjamin Ebo Yankson
+ * @since    2025-November
  */
 
 declare(strict_types=1);
@@ -19,8 +19,8 @@ class Group
    /**
     * Create a new church group
     *
-    * @param array $data Group creation data
-    * @return array Success response with group_id
+    * @param array $data Group creation payload
+    * @return array ['status' => 'success', 'group_id' => int]
     * @throws Exception On validation or database failure
     */
    public static function create(array $data): array
@@ -37,26 +37,23 @@ class Group
       $leaderId = (int)$data['leader_id'];
       $typeId   = (int)$data['type_id'];
 
-      // Validate leader exists and is active
+      // Validate leader
       $leader = $orm->getWhere('churchmember', [
          'MbrID'              => $leaderId,
          'MbrMembershipStatus' => 'Active',
          'Deleted'            => 0
       ]);
-
       if (empty($leader)) {
          Helpers::sendFeedback('Invalid or inactive group leader', 400);
       }
 
-      // Validate group type exists
-      $type = $orm->getWhere('grouptype', ['GroupTypeID' => $typeId]);
-      if (empty($type)) {
+      // Validate group type
+      if (empty($orm->getWhere('grouptype', ['GroupTypeID' => $typeId]))) {
          Helpers::sendFeedback('Invalid group type', 400);
       }
 
-      // Check for duplicate group name
-      $existing = $orm->getWhere('churchgroup', ['GroupName' => $data['name']]);
-      if (!empty($existing)) {
+      // Check duplicate name
+      if (!empty($orm->getWhere('churchgroup', ['GroupName' => $data['name']]))) {
          Helpers::sendFeedback('Group name already exists', 400);
       }
 
@@ -70,17 +67,15 @@ class Group
             'CreatedAt'        => date('Y-m-d H:i:s')
          ])['id'];
 
-         // Automatically add leader as member
+         // Auto-add leader as member
          $orm->insert('groupmember', [
-            'GroupID'   => $groupId,
-            'MbrID'     => $leaderId,
-            'JoinedAt'  => date('Y-m-d H:i:s')
+            'GroupID'  => $groupId,
+            'MbrID'    => $leaderId,
+            'JoinedAt' => date('Y-m-d H:i:s')
          ]);
 
          $orm->commit();
-
-         Helpers::logError("New group created: GroupID $groupId - {$data['name']}");
-
+         Helpers::logError("New group created: GroupID $groupId – {$data['name']}");
          return ['status' => 'success', 'group_id' => $groupId];
       } catch (Exception $e) {
             $orm->rollBack();
@@ -105,15 +100,13 @@ class Group
          Helpers::sendFeedback('Group not found', 404);
       }
 
-      $updateData = [];
+      $update = [];
 
       if (!empty($data['name'])) {
-         Helpers::validateInput($data, ['name' => 'required|max:100']);
-         $existing = $orm->getWhere('churchgroup', ['GroupName' => $data['name'], 'GroupID!=' => $groupId]);
-         if (!empty($existing)) {
+         if (!empty($orm->getWhere('churchgroup', ['GroupName' => $data['name'], 'GroupID!=' => $groupId]))) {
             Helpers::sendFeedback('Group name already exists', 400);
          }
-         $updateData['GroupName'] = $data['name'];
+         $update['GroupName'] = $data['name'];
       }
 
       if (!empty($data['leader_id'])) {
@@ -125,35 +118,32 @@ class Group
          if (empty($leader)) {
             Helpers::sendFeedback('Invalid or inactive leader', 400);
          }
-         $updateData['GroupLeaderID'] = (int)$data['leader_id'];
+         $update['GroupLeaderID'] = (int)$data['leader_id'];
       }
 
       if (!empty($data['type_id'])) {
-         $type = $orm->getWhere('grouptype', ['GroupTypeID' => (int)$data['type_id']]);
-         if (empty($type)) {
+         if (empty($orm->getWhere('grouptype', ['GroupTypeID' => (int)$data['type_id']]))) {
             Helpers::sendFeedback('Invalid group type', 400);
          }
-         $updateData['GroupTypeID'] = (int)$data['type_id'];
+         $update['GroupTypeID'] = (int)$data['type_id'];
       }
 
-      if (!empty($data['description'])) {
-         $updateData['GroupDescription'] = $data['description'];
+      if (isset($data['description'])) {
+         $update['GroupDescription'] = $data['description'];
       }
 
-      if (empty($updateData)) {
-         return ['status' => 'success', 'group_id' => $groupId];
+      if (!empty($update)) {
+         $orm->update('churchgroup', $update, ['GroupID' => $groupId]);
       }
-
-      $orm->update('churchgroup', $updateData, ['GroupID' => $groupId]);
 
       return ['status' => 'success', 'group_id' => $groupId];
    }
 
    /**
-    * Delete a group (only if no members or communications)
+    * Delete group (only if no members or messages)
     *
     * @param int $groupId Group ID
-    * @return array Success response
+    * @return array ['status' => 'success']
     */
    public static function delete(int $groupId): array
    {
@@ -164,20 +154,19 @@ class Group
          Helpers::sendFeedback('Group not found', 404);
       }
 
-      $members = $orm->getWhere('groupmember', ['GroupID' => $groupId]);
-      $messages = $orm->getWhere('communication', ['TargetGroupID' => $groupId]);
+      $members   = $orm->getWhere('groupmember', ['GroupID' => $groupId]);
+      $messages  = $orm->getWhere('communication', ['TargetGroupID' => $groupId]);
 
       if (!empty($members) || !empty($messages)) {
          Helpers::sendFeedback('Cannot delete group with members or messages', 400);
       }
 
       $orm->delete('churchgroup', ['GroupID' => $groupId]);
-
       return ['status' => 'success'];
    }
 
    /**
-    * Retrieve a single group with details
+    * Retrieve a single group with leader and type details
     *
     * @param int $groupId Group ID
     * @return array Group data
@@ -186,11 +175,11 @@ class Group
    {
       $orm = new ORM();
 
-      $groups = $orm->selectWithJoin(
+      $result = $orm->selectWithJoin(
             baseTable: 'churchgroup g',
             joins: [
             ['table' => 'churchmember l', 'on' => 'g.GroupLeaderID = l.MbrID'],
-            ['table' => 'grouptype t', 'on' => 'g.GroupTypeID = t.GroupTypeID']
+            ['table' => 'grouptype t',    'on' => 'g.GroupTypeID = t.GroupTypeID']
             ],
             fields: [
             'g.*',
@@ -203,15 +192,15 @@ class Group
             params: [':id' => $groupId]
       );
 
-      if (empty($groups)) {
+      if (empty($result)) {
          Helpers::sendFeedback('Group not found', 404);
       }
 
-      return $groups[0];
+      return $result[0];
    }
 
    /**
-    * Retrieve paginated list of groups
+    * Retrieve paginated groups with filters
     *
     * @param int   $page    Page number
     * @param int   $limit   Items per page
@@ -220,7 +209,7 @@ class Group
     */
    public static function getAll(int $page = 1, int $limit = 10, array $filters = []): array
    {
-      $orm = new ORM();
+      $orm    = new ORM();
       $offset = ($page - 1) * $limit;
 
       $conditions = [];
@@ -243,7 +232,7 @@ class Group
             baseTable: 'churchgroup g',
             joins: [
             ['table' => 'churchmember l', 'on' => 'g.GroupLeaderID = l.MbrID'],
-            ['table' => 'grouptype t', 'on' => 'g.GroupTypeID = t.GroupTypeID']
+            ['table' => 'grouptype t',    'on' => 'g.GroupTypeID = t.GroupTypeID']
             ],
             fields: [
             'g.GroupID',
@@ -264,17 +253,17 @@ class Group
 
       $total = $orm->runQuery(
          "SELECT COUNT(*) AS total FROM churchgroup g" .
-            (!empty($conditions) ? ' LEFT JOIN churchmember l ON g.GroupLeaderID = l.MbrID WHERE ' . implode(' AND ', array_keys($conditions)) : ''),
+            (!empty($conditions) ? " LEFT JOIN churchmember l ON g.GroupLeaderID = l.MbrID WHERE " . implode(' AND ', array_keys($conditions)) : ''),
             $params
       )[0]['total'];
 
       return [
             'data' => $groups,
             'pagination' => [
-            'page'  => $page,
-            'limit' => $limit,
-            'total' => (int)$total,
-            'pages' => (int)ceil($total / $limit)
+            'page'   => $page,
+            'limit'  => $limit,
+            'total'  => (int)$total,
+            'pages'  => (int)ceil($total / $limit)
             ]
       ];
    }

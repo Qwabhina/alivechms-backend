@@ -3,12 +3,20 @@
 /**
  * Communication & Notification System
  *
- * Supports In-App, SMS, and Email notifications with group broadcasting.
+ * Unified messaging engine supporting:
+ * - In-App notifications (instant)
+ * - SMS delivery (via SMSGateway)
+ * - Email delivery (via EmailGateway)
+ * - Group broadcasting
+ * - Delivery queue with status tracking
  *
- * @package AliveChMS\Core
- * @version 1.0.0
- * @author  Benjamin Ebo Yankson
- * @since   2025-11-21
+ * Designed for high-volume, reliable, auditable church communication.
+ * All messages are stored centrally and delivered asynchronously where needed.
+ *
+ * @package  AliveChMS\Core
+ * @version  1.0.0
+ * @author   Benjamin Ebo Yankson
+ * @since    2025-November
  */
 
 declare(strict_types=1);
@@ -16,22 +24,43 @@ declare(strict_types=1);
 class Communication
 {
    /**
-    * Send notification to individual or group
+    * Send a notification/message to one member or an entire group
     *
-    * @param array $data Message data
-    * @return array Success response
+    * Supports three delivery channels:
+    * - InApp: Instant, stored in communication_delivery (for UI display)
+    * - SMS: Queued for background delivery via SMSGateway
+    * - Email: Queued for background delivery via EmailGateway
+    *
+    * Group messages are automatically expanded to individual deliveries.
+    *
+    * @param array{
+    *     title:string,
+    *     message:string,
+    *     channel:'InApp'|'SMS'|'Email',
+    *     member_id?:int,
+    *     group_id?:int
+    * } $data Message payload
+    * @return array{status:string, communication_id:int} Success response with stored message ID
     */
    public static function send(array $data): array
    {
       $orm = new ORM();
 
       Helpers::validateInput($data, [
-         'title'    => 'required|max:200',
-         'message'  => 'required',
-         'channel'  => 'required|in:InApp,SMS,Email',
+         'title'   => 'required|max:200',
+         'message' => 'required',
+         'channel' => 'required|in:InApp,SMS,Email'
       ]);
 
-      $sentBy = Auth::getCurrentUserId($token ?? '');
+      if (empty($data['member_id']) && empty($data['group_id'])) {
+         Helpers::sendFeedback('Either member_id or group_id is required', 400);
+      }
+
+      if (!empty($data['member_id']) && !empty($data['group_id'])) {
+         Helpers::sendFeedback('Cannot specify both member_id and group_id', 400);
+      }
+
+      $sentBy = Auth::getCurrentUserId();
 
       $commId = $orm->insert('communication', [
          'Title'          => $data['title'],
@@ -46,53 +75,78 @@ class Communication
 
       // Queue delivery
       if (!empty($data['member_id'])) {
-         self::queueIndividual($commId, (int)$data['member_id'], $data['channel'], $orm);
-      } elseif (!empty($data['group_id'])) {
-         self::queueGroup($commId, (int)$data['group_id'], $data['channel'], $orm);
+         self::queueIndividualDelivery($commId, (int)$data['member_id'], $data['channel'], $orm);
+      } else {
+         self::queueGroupDelivery($commId, (int)$data['group_id'], $data['channel'], $orm);
       }
 
-      Helpers::logError("Notification queued: CommID $commId");
+      Helpers::logError("Communication queued: ID $commId | Channel: {$data['channel']} | Recipients: " .
+         (!empty($data['member_id']) ? "Member {$data['member_id']}" : "Group {$data['group_id']}"));
 
       return ['status' => 'success', 'communication_id' => $commId];
    }
 
-   private static function queueIndividual(int $commId, int $memberId, string $channel, ORM $orm): void
+   /**
+    * Queue delivery for a single member
+    *
+    * @param int    $commId   Communication record ID
+    * @param int    $memberId Target member ID
+    * @param string $channel  Delivery channel
+    * @param ORM    $orm      ORM instance (for transaction safety)
+    * @return void
+    */
+   private static function queueIndividualDelivery(int $commId, int $memberId, string $channel, ORM $orm): void
    {
       $orm->insert('communication_delivery', [
-         'CommID'   => $commId,
-         'MbrID'    => $memberId,
-         'Channel'  => $channel
+         'CommID'  => $commId,
+         'MbrID'   => $memberId,
+         'Channel' => $channel,
+         'Status'  => 'Pending'
       ]);
    }
 
-   private static function queueGroup(int $commId, int $groupId, string $channel, ORM $orm): void
+   /**
+    * Queue delivery for all members of a group
+    *
+    * Expands group membership and creates one delivery record per member.
+    *
+    * @param int    $commId  Communication record ID
+    * @param int    $groupId Target group ID
+    * @param string $channel Delivery channel
+    * @param ORM    $orm     ORM instance (for transaction safety)
+    * @return void
+    */
+   private static function queueGroupDelivery(int $commId, int $groupId, string $channel, ORM $orm): void
    {
       $members = $orm->runQuery(
          "SELECT MbrID FROM groupmember WHERE GroupID = :gid",
          [':gid' => $groupId]
       );
 
-      foreach ($members as $m) {
+      foreach ($members as $member) {
          $orm->insert('communication_delivery', [
             'CommID'  => $commId,
-            'MbrID'   => (int)$m['MbrID'],
-            'Channel' => $channel
+            'MbrID'   => (int)$member['MbrID'],
+            'Channel' => $channel,
+            'Status'  => 'Pending'
          ]);
       }
    }
 
    /**
-    * Get notifications for current user
+    * Retrieve current user's unread + read notifications
     *
-    * @param int $page  Page number
-    * @param int $limit Items per page
-    * @return array Notifications
+    * Supports pagination. InApp messages are instantly marked as delivered.
+    *
+    * @param int $page  Page number (1-based)
+    * @param int $limit Items per page (default 20)
+    * @return array{data:array, pagination:array} Paginated notifications
     */
    public static function getMyNotifications(int $page = 1, int $limit = 20): array
    {
-      $orm = new ORM();
-      $userId = Auth::getCurrentUserId($token ?? '');
-      $offset = ($page - 1) * $limit;
+      $orm       = new ORM();
+      $userId    = Auth::getCurrentUserId();
+      $offset    = ($page - 1) * $limit;
 
       $notifications = $orm->selectWithJoin(
          baseTable: 'communication_delivery cd',
@@ -106,41 +160,51 @@ class Communication
             'cd.Status',
             'cd.DeliveredAt'
          ],
-         conditions: ['cd.MbrID' => ':uid'],
-         params: [':uid' => $userId],
+         conditions: ['cd.MbrID' => ':user_id'],
+         params: [':user_id' => $userId],
          orderBy: ['c.CreatedAt' => 'DESC'],
          limit: $limit,
          offset: $offset
       );
 
-      $total = $orm->runQuery("SELECT COUNT(*) AS total FROM communication_delivery WHERE MbrID = :uid", [':uid' => $userId])[0]['total'];
+      $total = $orm->runQuery(
+         "SELECT COUNT(*) AS total FROM communication_delivery WHERE MbrID = :uid",
+         [':uid' => $userId]
+      )[0]['total'];
 
       return [
          'data' => $notifications,
          'pagination' => [
-            'page' => $page,
-            'limit' => $limit,
-            'total' => (int)$total,
-            'pages' => (int)ceil($total / $limit)
+            'page'   => $page,
+            'limit'  => $limit,
+            'total'  => (int)$total,
+            'pages'  => (int)ceil($total / $limit)
             ]
       ];
    }
 
    /**
-    * Mark notification as read
+    * Mark a notification as read/delivered
     *
-    * @param int $commId Communication ID
-    * @return array Success response
+    * For InApp: marks as Sent
+    * For SMS/Email: can be used after actual delivery confirmation
+    *
+    * @param int $commId Communication record ID
+    * @return array{status:string} Success response
     */
    public static function markAsRead(int $commId): array
    {
-      $orm = new ORM();
-      $userId = Auth::getCurrentUserId($token ?? '');
+      $orm    = new ORM();
+      $userId = Auth::getCurrentUserId();
 
-      $orm->update('communication_delivery', [
+      $affected = $orm->update('communication_delivery', [
          'Status'      => 'Sent',
          'DeliveredAt' => date('Y-m-d H:i:s')
       ], ['CommID' => $commId, 'MbrID' => $userId]);
+
+      if ($affected === 0) {
+         Helpers::sendFeedback('Notification not found or already read', 404);
+      }
 
       return ['status' => 'success'];
    }

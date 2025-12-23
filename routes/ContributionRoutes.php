@@ -1,107 +1,160 @@
 <?php
 
 /**
- * Contribution API Routes – RESTful & Convention-Compliant
+ * Contribution API Routes – v1
  *
- * Endpoints:
- * /contribution/create
- * /contribution/update/{id}
- * /contribution/delete/{id}
- * /contribution/restore/{id}
- * /contribution/view/{id}
- * /contribution/all
- * /contribution/total
+ * Full financial contribution management:
+ * - Create new contribution
+ * - Update existing contribution
+ * - Soft-delete & restore
+ * - View single contribution
+ * - Paginated listing with powerful filtering
+ * - Totals reporting
  *
- * @package AliveChMS\Routes
- * @version 1.0.0
- * @author  Benjamin Ebo Yankson
- * @since   2025-11-21
+ * All operations strictly permission-controlled.
+ *
+ * @package  AliveChMS\Routes
+ * @version  1.0.0
+ * @author   Benjamin Ebo Yankson
+ * @since    2025-November
  */
+
+declare(strict_types=1);
 
 require_once __DIR__ . '/../core/Contribution.php';
 
-if (!$token || !Auth::verify($token)) {
+// ---------------------------------------------------------------------
+// AUTHENTICATION & AUTHORIZATION
+// ---------------------------------------------------------------------
+$token = Auth::getBearerToken();
+if (!$token || Auth::verify($token) === false) {
     Helpers::sendFeedback('Unauthorized: Valid token required', 401);
 }
 
-$action     = $pathParts[1] ?? '';
-$resourceId = $pathParts[2] ?? null;
+// ---------------------------------------------------------------------
+// ROUTE DISPATCHER
+// ---------------------------------------------------------------------
+match (true) {
 
-switch ("$method $action") {
-
-    case 'POST create':
+    // CREATE CONTRIBUTION
+    $method === 'POST' && $path === 'contribution/create' => (function () use ($token) {
         Auth::checkPermission($token, 'create_contribution');
+
         $payload = json_decode(file_get_contents('php://input'), true);
-        if (!$payload) {
+        if (!is_array($payload)) {
             Helpers::sendFeedback('Invalid JSON payload', 400);
         }
+
         $result = Contribution::create($payload);
         echo json_encode($result);
-        break;
+    })(),
 
-    case 'PUT update':
+    // UPDATE CONTRIBUTION
+    $method === 'PUT' && $pathParts[0] === 'contribution' && ($pathParts[1] ?? '') === 'update' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
         Auth::checkPermission($token, 'edit_contribution');
-        if (!$resourceId || !is_numeric($resourceId)) {
-            Helpers::sendFeedback('Contribution ID is required in URL', 400);
-        }
-        $payload = json_decode(file_get_contents('php://input'), true) ?? [];
-        $result = Contribution::update((int)$resourceId, $payload);
-        echo json_encode($result);
-        break;
 
-    case 'DELETE delete':
+        $contributionId = $pathParts[2];
+        if (!is_numeric($contributionId)) {
+            Helpers::sendFeedback('Valid Contribution ID required', 400);
+        }
+
+        $payload = json_decode(file_get_contents('php://input'), true);
+        if (!is_array($payload)) {
+            Helpers::sendFeedback('Invalid JSON payload', 400);
+        }
+
+        $result = Contribution::update((int)$contributionId, $payload);
+        echo json_encode($result);
+    })(),
+
+    // SOFT DELETE CONTRIBUTION
+    $method === 'DELETE' && $pathParts[0] === 'contribution' && ($pathParts[1] ?? '') === 'delete' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
         Auth::checkPermission($token, 'delete_contribution');
-        if (!$resourceId || !is_numeric($resourceId)) {
-            Helpers::sendFeedback('Contribution ID is required in URL', 400);
-        }
-        $result = Contribution::delete((int)$resourceId);
-        echo json_encode($result);
-        break;
 
-    case 'POST restore':
+        $contributionId = $pathParts[2];
+        if (!is_numeric($contributionId)) {
+            Helpers::sendFeedback('Valid Contribution ID required', 400);
+        }
+
+        $result = Contribution::delete((int)$contributionId);
+        echo json_encode($result);
+    })(),
+
+    // RESTORE SOFT-DELETED CONTRIBUTION
+    $method === 'POST' && $pathParts[0] === 'contribution' && ($pathParts[1] ?? '') === 'restore' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
         Auth::checkPermission($token, 'delete_contribution');
-        if (!$resourceId || !is_numeric($resourceId)) {
-            Helpers::sendFeedback('Contribution ID is required in URL', 400);
+
+        $contributionId = $pathParts[2];
+        if (!is_numeric($contributionId)) {
+            Helpers::sendFeedback('Valid Contribution ID required', 400);
         }
-        $result = Contribution::restore((int)$resourceId);
+
+        $result = Contribution::restore((int)$contributionId);
         echo json_encode($result);
-        break;
+    })(),
 
-    case 'GET view':
+    // VIEW SINGLE CONTRIBUTION
+    $method === 'GET' && $pathParts[0] === 'contribution' && ($pathParts[1] ?? '') === 'view' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
         Auth::checkPermission($token, 'view_contribution');
-        if (!$resourceId || !is_numeric($resourceId)) {
-            Helpers::sendFeedback('Contribution ID is required in URL', 400);
+
+        $contributionId = $pathParts[2];
+        if (!is_numeric($contributionId)) {
+            Helpers::sendFeedback('Valid Contribution ID required', 400);
         }
-        $contribution = Contribution::get((int)$resourceId);
-        echo json_encode($contribution);
-        break;
 
-    case 'GET all':
+        $result = Contribution::get((int)$contributionId);
+        echo json_encode($result);
+    })(),
+
+    // LIST ALL CONTRIBUTIONS (Paginated + Filtered)
+    $method === 'GET' && $path === 'contribution/all' => (function () use ($token) {
         Auth::checkPermission($token, 'view_contribution');
-        $page   = max(1, (int)($_GET['page'] ?? 1));
-        $limit  = max(1, min(100, (int)($_GET['limit'] ?? 10)));
+
+        $page  = max(1, (int)($_GET['page'] ?? 1));
+        $limit = max(1, min(100, (int)($_GET['limit'] ?? 10)));
+
         $filters = [];
-        foreach (['contribution_type_id', 'member_id', 'fiscal_year_id', 'start_date', 'end_date'] as $key) {
+        foreach (
+            [
+                'contribution_type_id',
+                'member_id',
+                'fiscal_year_id',
+                'start_date',
+                'end_date'
+            ] as $key
+        ) {
             if (isset($_GET[$key]) && $_GET[$key] !== '') {
                 $filters[$key] = $_GET[$key];
             }
         }
+
         $result = Contribution::getAll($page, $limit, $filters);
         echo json_encode($result);
-        break;
+    })(),
 
-    case 'GET total':
+    // TOTAL CONTRIBUTIONS (Reporting)
+    $method === 'GET' && $path === 'contribution/total' => (function () use ($token) {
         Auth::checkPermission($token, 'view_contribution');
+
         $filters = [];
-        foreach (['contribution_type_id', 'member_id', 'fiscal_year_id', 'start_date', 'end_date'] as $key) {
+        foreach (
+            [
+                'contribution_type_id',
+                'member_id',
+                'fiscal_year_id',
+                'start_date',
+                'end_date'
+            ] as $key
+        ) {
             if (isset($_GET[$key]) && $_GET[$key] !== '') {
                 $filters[$key] = $_GET[$key];
             }
         }
+
         $result = Contribution::getTotal($filters);
         echo json_encode($result);
-        break;
+    })(),
 
-    default:
-        Helpers::sendFeedback('Contribution endpoint not found', 404);
-}
+    // FALLBACK
+    default => Helpers::sendFeedback('Contribution endpoint not found', 404),
+};

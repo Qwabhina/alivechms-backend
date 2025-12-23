@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Finance Reporting Class
+ * Financial Reporting
  *
  * Generates key financial reports:
  * - Income Statement
@@ -10,12 +10,12 @@
  * - Contribution Summary
  * - Balance Sheet
  *
- * All reports are fiscal-year based with optional date filtering.
+ * All reports are fiscal-year based with optional date range filtering.
  *
- * @package AliveChMS\Core
- * @version 1.0.0
- * @author  Benjamin Ebo Yankson
- * @since   2025-11-21
+ * @package  AliveChMS\Core
+ * @version  1.0.0
+ * @author   Benjamin Ebo Yankson
+ * @since    2025-November
  */
 
 declare(strict_types=1);
@@ -34,11 +34,7 @@ class Finance
    {
       $orm = new ORM();
 
-      // Validate fiscal year
-      $fy = $orm->getWhere('fiscalyear', ['FiscalYearID' => $fiscalYearId, 'Status' => 'Active']);
-      if (empty($fy)) {
-         Helpers::sendFeedback('Invalid or inactive fiscal year', 400);
-      }
+      self::validateFiscalYear($fiscalYearId);
 
       $params = [':fy' => $fiscalYearId];
       $where  = "c.FiscalYearID = :fy AND c.Deleted = 0";
@@ -57,7 +53,8 @@ class Finance
              FROM contribution c
              JOIN contributiontype ct ON c.ContributionTypeID = ct.ContributionTypeID
              WHERE $where
-             GROUP BY ct.ContributionTypeID",
+             GROUP BY ct.ContributionTypeID
+             ORDER BY total DESC",
             $params
       );
 
@@ -66,20 +63,21 @@ class Finance
              FROM expense e
              JOIN expense_category ec ON e.ExpenseCategoryID = ec.ExpenseCategoryID
              WHERE e.FiscalYearID = :fy AND e.ExpenseStatus = 'Approved'
-             GROUP BY ec.ExpenseCategoryID",
+             GROUP BY ec.ExpenseCategoryID
+             ORDER BY total DESC",
          [':fy' => $fiscalYearId]
       );
 
-      $totalIncome = array_sum(array_column($contributions, 'total'));
-      $totalExpense = array_sum(array_column($expenses, 'total'));
+      $totalIncome   = array_sum(array_column($contributions, 'total'));
+      $totalExpenses = array_sum(array_column($expenses, 'total'));
 
       return [
-         'fiscal_year'     => $fy[0]['YearName'],
-         'income'          => $contributions,
-         'total_income'    => number_format($totalIncome, 2),
-         'expenses'        => $expenses,
-         'total_expenses'  => number_format($totalExpense, 2),
-         'net_surplus'     => number_format($totalIncome - $totalExpense, 2)
+         'fiscal_year'    => self::getFiscalYearName($fiscalYearId),
+         'income'         => $contributions,
+         'total_income'   => number_format($totalIncome, 2),
+         'expenses'       => $expenses,
+         'total_expenses' => number_format($totalExpenses, 2),
+         'net_surplus'    => number_format($totalIncome - $totalExpenses, 2)
       ];
    }
 
@@ -95,7 +93,10 @@ class Finance
    {
       $orm = new ORM();
 
-      $budgets = $orm->runQuery(
+      self::validateFiscalYear($fiscalYearId);
+
+      // Budgeted amounts
+      $budgeted = $orm->runQuery(
          "SELECT bi.Category, SUM(bi.Amount) AS budgeted
              FROM budget_items bi
              JOIN budget b ON bi.BudgetID = b.BudgetID
@@ -125,22 +126,23 @@ class Finance
             $params
       );
 
-      // Merge budgeted and actual
       $report = [];
-      foreach ($budgets as $b) {
+      foreach ($budgeted as $b) {
          $report[$b['Category']] = [
-            'category'   => $b['Category'],
-            'budgeted'   => (float)$b['budgeted'],
-            'actual'     => 0.0,
-            'variance'   => 0.0
+            'category' => $b['Category'],
+            'budgeted' => (float)$b['budgeted'],
+            'actual'   => 0.0,
+            'variance' => 0.0
          ];
       }
+
       foreach ($actual as $a) {
-         if (!isset($report[$a['Category']])) {
-            $report[$a['Category']] = ['category' => $a['Category'], 'budgeted' => 0.0];
+         $cat = $a['Category'];
+         if (!isset($report[$cat])) {
+            $report[$cat] = ['category' => $cat, 'budgeted' => 0.0, 'actual' => 0.0, 'variance' => 0.0];
          }
-         $report[$a['Category']]['actual'] = (float)$a['actual'];
-         $report[$a['Category']]['variance'] = $report[$a['Category']]['budgeted'] - (float)$a['actual'];
+         $report[$cat]['actual']   = (float)$a['actual'];
+         $report[$cat]['variance'] = $report[$cat]['budgeted'] - (float)$a['actual'];
       }
 
       return ['data' => array_values($report)];
@@ -157,6 +159,8 @@ class Finance
    public static function getExpenseSummary(int $fiscalYearId, ?string $dateFrom = null, ?string $dateTo = null): array
    {
       $orm = new ORM();
+
+      self::validateFiscalYear($fiscalYearId);
 
       $params = [':fy' => $fiscalYearId];
       $where  = "e.FiscalYearID = :fy AND e.ExpenseStatus = 'Approved'";
@@ -183,7 +187,7 @@ class Finance
       $grandTotal = array_sum(array_column($summary, 'total'));
 
       return [
-         'summary' => $summary,
+         'summary'     => $summary,
          'grand_total' => number_format($grandTotal, 2)
       ];
    }
@@ -199,6 +203,8 @@ class Finance
    public static function getContributionSummary(int $fiscalYearId, ?string $dateFrom = null, ?string $dateTo = null): array
    {
       $orm = new ORM();
+
+      self::validateFiscalYear($fiscalYearId);
 
       $params = [':fy' => $fiscalYearId];
       $where  = "c.FiscalYearID = :fy AND c.Deleted = 0";
@@ -225,7 +231,7 @@ class Finance
       $grandTotal = array_sum(array_column($summary, 'total'));
 
       return [
-         'summary' => $summary,
+         'summary'     => $summary,
          'grand_total' => number_format($grandTotal, 2)
       ];
    }
@@ -240,19 +246,32 @@ class Finance
     */
    public static function getBalanceSheet(int $fiscalYearId, ?string $dateFrom = null, ?string $dateTo = null): array
    {
-      $income = self::getContributionSummary($fiscalYearId, $dateFrom, $dateTo)['grand_total'];
-      $expense = self::getExpenseSummary($fiscalYearId, $dateFrom, $dateTo)['grand_total'];
-
-      $net = (float)$income - (float)$expense;
+      $income   = (float)self::getContributionSummary($fiscalYearId, $dateFrom, $dateTo)['grand_total'];
+      $expenses = (float)self::getExpenseSummary($fiscalYearId, $dateFrom, $dateTo)['grand_total'];
+      $net      = $income - $expenses;
 
       return [
-            'assets' => [
-            'cash_in_hand' => $income
-            ],
-            'liabilities' => [
-            'approved_expenses' => $expense
-            ],
-         'net_assets' => number_format($net, 2)
+         'assets'      => ['cash_in_hand' => number_format($income, 2)],
+         'liabilities' => ['approved_expenses' => number_format($expenses, 2)],
+         'net_assets'  => number_format($net, 2)
       ];
+   }
+
+   /** Private Helpers */
+
+   private static function validateFiscalYear(int $fiscalYearId): void
+   {
+      $orm = new ORM();
+      $fy  = $orm->getWhere('fiscalyear', ['FiscalYearID' => $fiscalYearId, 'Status' => 'Active']);
+      if (empty($fy)) {
+         Helpers::sendFeedback('Invalid or inactive fiscal year', 400);
+      }
+   }
+
+   private static function getFiscalYearName(int $fiscalYearId): string
+   {
+      $orm = new ORM();
+      $fy  = $orm->getWhere('fiscalyear', ['FiscalYearID' => $fiscalYearId])[0] ?? null;
+      return $fy ? $fy['YearName'] : 'Unknown';
    }
 }

@@ -1,160 +1,134 @@
 <?php
 
-/** Expense Category Management Class
- * Handles creation, updating, deletion, and retrieval of expense categories
- * Validates input data and checks for uniqueness of category names
- * Implements error handling and transaction management
- * @package ExpenseCategory
+/**
+ * Expense Category Management
+ *
+ * Full CRUD operations for expense categories with uniqueness,
+ * usage protection, and audit trail.
+ *
+ * @package  AliveChMS\Core
+ * @version  1.0.0
+ * @author   Benjamin Ebo Yankson
+ * @since    2025-November
  */
+
+declare(strict_types=1);
+
 class ExpenseCategory
 {
     /**
      * Create a new expense category
-     * @param array $data The category data containing 'name'
-     * @return array The created category ID and status
-     * @throws Exception if validation fails or database errors occur
+     *
+     * @param array $data Category payload
+     * @return array ['status' => 'success', 'category_id' => int]
+     * @throws Exception On validation or database failure
      */
-    public static function create($data)
+    public static function create(array $data): array
     {
         $orm = new ORM();
-        try {
-            Helpers::validateInput($data, [
-                'name' => 'required'
-            ]);
 
-            // Validate name length and uniqueness
-            if (strlen($data['name']) > 50) {
-                throw new Exception('Category name must not exceed 50 characters');
-            }
-            $existing = $orm->getWhere('expensecategory', ['ExpCategoryName' => $data['name']]);
-            if (!empty($existing)) {
-                throw new Exception('Category name already exists');
-            }
+        Helpers::validateInput($data, [
+            'name' => 'required|max:50'
+        ]);
 
-            $orm->beginTransaction();
-            $categoryId = $orm->insert('expensecategory', [
-                'ExpCategoryName' => $data['name']
-            ])['id'];
-            $orm->commit();
+        $name = trim($data['name']);
 
-            return ['status' => 'success', 'category_id' => $categoryId];
-        } catch (Exception $e) {
-            $orm->rollBack();
-            Helpers::logError('Expense category create error: ' . $e->getMessage());
-            throw $e;
+        if (!empty($orm->getWhere('expense_category', ['CategoryName' => $name]))) {
+            Helpers::sendFeedback('Category name already exists', 400);
         }
+
+        $categoryId = $orm->insert('expense_category', [
+            'CategoryName' => $name
+        ])['id'];
+
+        return ['status' => 'success', 'category_id' => $categoryId];
     }
+
     /**
      * Update an existing expense category
-     * @param int $categoryId The ID of the category to update
-     * @param array $data The new category data containing 'name'
-     * @return array The updated category ID and status
-     * @throws Exception if validation fails or database errors occur
+     *
+     * @param int   $categoryId Category ID
+     * @param array $data       Updated data
+     * @return array ['status' => 'success', 'category_id' => int]
      */
-    public static function update($categoryId, $data)
+    public static function update(int $categoryId, array $data): array
     {
         $orm = new ORM();
-        try {
-            Helpers::validateInput($data, [
-                'name' => 'required'
-            ]);
 
-            // Validate name length and uniqueness
-            if (strlen($data['name']) > 50) {
-                throw new Exception('Category name must not exceed 50 characters');
-            }
-            $existing = $orm->getWhere('expensecategory', ['ExpCategoryName' => $data['name']]);
-            if (!empty($existing) && $existing[0]['ExpCategoryID'] != $categoryId) {
-                throw new Exception('Category name already exists');
-            }
+        $category = $orm->getWhere('expense_category', ['ExpenseCategoryID' => $categoryId]);
+        if (empty($category)) {
+            Helpers::sendFeedback('Category not found', 404);
+        }
 
-            // Validate category exists
-            $category = $orm->getWhere('expensecategory', ['ExpCategoryID' => $categoryId]);
-            if (empty($category)) {
-                throw new Exception('Category not found');
-            }
-
-            $orm->beginTransaction();
-            $orm->update('expensecategory', [
-                'ExpCategoryName' => $data['name']
-            ], ['ExpCategoryID' => $categoryId]);
-            $orm->commit();
-
+        if (empty($data['name'])) {
             return ['status' => 'success', 'category_id' => $categoryId];
-        } catch (Exception $e) {
-            $orm->rollBack();
-            Helpers::logError('Expense category update error: ' . $e->getMessage());
-            throw $e;
         }
+
+        $name = trim($data['name']);
+        Helpers::validateInput(['name' => $name], ['name' => 'required|max:50']);
+
+        if (!empty($orm->getWhere('expense_category', [
+            'CategoryName'         => $name,
+            'ExpenseCategoryID <>' => $categoryId
+        ]))) {
+            Helpers::sendFeedback('Category name already exists', 400);
+        }
+
+        $orm->update('expense_category', ['CategoryName' => $name], ['ExpenseCategoryID' => $categoryId]);
+        return ['status' => 'success', 'category_id' => $categoryId];
     }
+
     /**
-     * Delete an expense category
-     * @param int $categoryId The ID of the category to delete
-     * @return array Status of the deletion
-     * @throws Exception if the category is used in expenses or does not exist
+     * Delete an expense category (only if unused)
+     *
+     * @param int $categoryId Category ID
+     * @return array ['status' => 'success']
      */
-    public static function delete($categoryId)
+    public static function delete(int $categoryId): array
     {
         $orm = new ORM();
-        try {
-            // Validate category exists
-            $category = $orm->getWhere('expensecategory', ['ExpCategoryID' => $categoryId]);
-            if (empty($category)) {
-                throw new Exception('Category not found');
-            }
 
-            // Check if category is used in expenses
-            $used = $orm->getWhere('expense', ['ExpCategoryID' => $categoryId]);
-            if (!empty($used)) {
-                throw new Exception('Cannot delete category used in expenses');
-            }
-
-            $orm->beginTransaction();
-            $orm->delete('expensecategory', ['ExpCategoryID' => $categoryId]);
-            $orm->commit();
-
-            return ['status' => 'success'];
-        } catch (Exception $e) {
-            $orm->rollBack();
-            Helpers::logError('Expense category delete error: ' . $e->getMessage());
-            throw $e;
+        $category = $orm->getWhere('expense_category', ['ExpenseCategoryID' => $categoryId]);
+        if (empty($category)) {
+            Helpers::sendFeedback('Category not found', 404);
         }
+
+        if (!empty($orm->getWhere('expense', ['ExpenseCategoryID' => $categoryId]))) {
+            Helpers::sendFeedback('Cannot delete category used in expenses', 400);
+        }
+
+        $orm->delete('expense_category', ['ExpenseCategoryID' => $categoryId]);
+        return ['status' => 'success'];
     }
+
     /**
-     * Get an expense category by ID
-     * @param int $categoryId The ID of the category to retrieve
-     * @return array The category data
-     * @throws Exception if the category does not exist
+     * Retrieve a single expense category
+     *
+     * @param int $categoryId Category ID
+     * @return array Category data
      */
-    public static function get($categoryId)
+    public static function get(int $categoryId): array
     {
         $orm = new ORM();
-        try {
-            $category = $orm->getWhere('expensecategory', ['ExpCategoryID' => $categoryId])[0] ?? null;
-            if (!$category) {
-                throw new Exception('Category not found');
-            }
-            return $category;
-        } catch (Exception $e) {
-            Helpers::logError('Expense category get error: ' . $e->getMessage());
-            throw $e;
+
+        $category = $orm->getWhere('expense_category', ['ExpenseCategoryID' => $categoryId]);
+        if (empty($category)) {
+            Helpers::sendFeedback('Category not found', 404);
         }
+
+        return $category[0];
     }
+
     /**
-     * Get all expense categories
-     * @return array List of all categories
-     * @throws Exception if there is an error retrieving categories
+     * Retrieve all expense categories
+     *
+     * @return array ['data' => array]
      */
-    public static function getAll()
+    public static function getAll(): array
     {
         $orm = new ORM();
-        try {
-            $categories = $orm->getAll('expensecategory');
-            return ['data' => $categories];
-        } catch (Exception $e) {
-            Helpers::logError('Expense category getAll error: ' . $e->getMessage());
-            throw $e;
-        }
+        $categories = $orm->getAll('expense_category');
+
+        return ['data' => $categories];
     }
 }
-?>

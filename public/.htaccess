@@ -1,0 +1,7 @@
+<FilesMatch "\.(css|js|jpg|png|gif)$">
+RewriteEngine Off
+SetHandler default-handler
+</FilesMatch>
+
+AddType text/css .css
+AddType application/javascript .js

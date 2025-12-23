@@ -1,32 +1,55 @@
 <?php
 
 /**
- * Dashboard API Routes
+ * Dashboard API Routes – v1
  *
- * Single endpoint: /dashboard/overview
+ * Single, powerful endpoint providing a comprehensive real-time overview
+ * for church leadership:
+ * - Membership statistics
+ * - Financial summary
+ * - Recent attendance trends
+ * - Upcoming events
+ * - Pending approvals
+ * - Recent activity feed
  *
- * @package AliveChMS\Routes
- * @version 1.0.0
- * @author  Benjamin Ebo Yankson
- * @since   2025-11-21
+ * Fully branch-aware and permission-controlled.
+ *
+ * @package  AliveChMS\Routes
+ * @version  1.0.0
+ * @author   Benjamin Ebo Yankson
+ * @since    2025-November
  */
+
+declare(strict_types=1);
 
 require_once __DIR__ . '/../core/Dashboard.php';
 
-if (!$token || !Auth::verify($token)) {
+// ---------------------------------------------------------------------
+// AUTHENTICATION & AUTHORIZATION
+// ---------------------------------------------------------------------
+$token = Auth::getBearerToken();
+if (!$token || Auth::verify($token) === false) {
     Helpers::sendFeedback('Unauthorized: Valid token required', 401);
 }
 
-if ($path !== 'dashboard/overview' || $method !== 'GET') {
-    Helpers::sendFeedback('Endpoint not found', 404);
-}
+// ---------------------------------------------------------------------
+// ROUTE DISPATCHER
+// ---------------------------------------------------------------------
+match (true) {
 
-Auth::checkPermission($token, 'view_dashboard');
+    // DASHBOARD OVERVIEW
+    $method === 'GET' && $path === 'dashboard/overview' => (function () {
+        Auth::checkPermission('view_dashboard');
 
-try {
-    $overview = Dashboard::getOverview();
-    echo json_encode($overview);
-} catch (Exception $e) {
-    Helpers::logError("Dashboard error: " . $e->getMessage());
-    Helpers::sendFeedback('Failed to load dashboard', 500);
-}
+        try {
+            $overview = Dashboard::getOverview();
+            echo json_encode($overview);
+        } catch (Exception $e) {
+            Helpers::logError("Dashboard generation failed: " . $e->getMessage());
+            Helpers::sendFeedback('Failed to generate dashboard', 500);
+        }
+    })(),
+
+    // FALLBACK
+    default => Helpers::sendFeedback('Dashboard endpoint not found', 404),
+};

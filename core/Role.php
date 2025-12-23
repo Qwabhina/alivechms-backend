@@ -1,14 +1,25 @@
 <?php
 
 /**
- * Role & Permission Management Class
+ * Role Management – Role-Based Access Control (RBAC) Core
  *
- * Full CRUD for roles, permissions, and assignments.
+ * Manages church roles (e.g., Pastor, Treasurer, Admin, Member) and their permissions.
+ * This is the central pillar of the entire authorization system.
  *
- * @package AliveChMS\Core
- * @version 1.0.0
- * @author  Benjamin Ebo Yankson
- * @since   2025-11-21
+ * Features:
+ * - Full CRUD for roles
+ * - Bulk permission assignment (replace all)
+ * - Role-to-member assignment
+ * - Retrieval with full permission list
+ * - Deletion protection when members are assigned
+ * - Comprehensive audit logging
+ *
+ * All operations are atomic, secure, and strictly typed.
+ *
+ * @package  AliveChMS\Core
+ * @version  1.0.0
+ * @author   Benjamin Ebo Yankson
+ * @since    2025-November
  */
 
 declare(strict_types=1);
@@ -16,7 +27,13 @@ declare(strict_types=1);
 class Role
 {
    /**
-    * Create a new role
+    * Create a new church role
+    *
+    * Role names must be unique system-wide.
+    *
+    * @param array{name:string, description?:string} $data Role payload
+    * @return array{status:string, role_id:int} Success response with created role ID
+    * @throws Exception On validation failure or database error
     */
    public static function create(array $data): array
    {
@@ -27,21 +44,29 @@ class Role
          'description' => 'max:500|nullable'
       ]);
 
-      $existing = $orm->getWhere('churchrole', ['RoleName' => $data['name']]);
-      if (!empty($existing)) {
+      $name = trim($data['name']);
+
+      if (!empty($orm->getWhere('churchrole', ['RoleName' => $name]))) {
          Helpers::sendFeedback('Role name already exists', 400);
       }
 
       $roleId = $orm->insert('churchrole', [
-         'RoleName'    => $data['name'],
+         'RoleName'    => $name,
          'Description' => $data['description'] ?? null
       ])['id'];
 
+      Helpers::logError("New role created: ID $roleId – $name");
       return ['status' => 'success', 'role_id' => $roleId];
    }
 
    /**
-    * Update role
+    * Update an existing role
+    *
+    * Only name and description can be modified. Permissions are managed separately.
+    *
+    * @param int $roleId The primary key of the role
+    * @param array{name?:string, description?:string} $data Updated fields
+    * @return array{status:string, role_id:int} Success response
     */
    public static function update(int $roleId, array $data): array
    {
@@ -53,26 +78,34 @@ class Role
       }
 
       $update = [];
+
       if (!empty($data['name'])) {
-         $existing = $orm->getWhere('churchrole', ['RoleName' => $data['name'], 'RoleID!=' => $roleId]);
-         if (!empty($existing)) {
+         $newName = trim($data['name']);
+         if (!empty($orm->getWhere('churchrole', ['RoleName' => $newName, 'RoleID <>' => $roleId]))) {
             Helpers::sendFeedback('Role name already exists', 400);
          }
-         $update['RoleName'] = $data['name'];
+         $update['RoleName'] = $newName;
       }
+
       if (isset($data['description'])) {
          $update['Description'] = $data['description'];
       }
 
       if (!empty($update)) {
          $orm->update('churchrole', $update, ['RoleID' => $roleId]);
+         Helpers::logError("Role updated: ID $roleId");
       }
 
       return ['status' => 'success', 'role_id' => $roleId];
    }
 
    /**
-    * Delete role (only if no members assigned)
+    * Delete a role
+    *
+    * Deletion is blocked if any member is currently assigned this role.
+    *
+    * @param int $roleId The primary key of the role to delete
+    * @return array{status:string} Success response
     */
    public static function delete(int $roleId): array
    {
@@ -83,80 +116,105 @@ class Role
          Helpers::sendFeedback('Role not found', 404);
       }
 
+      // Check if role is assigned to any member
       $assigned = $orm->getWhere('churchmember', ['ChurchRoleID' => $roleId]);
       if (!empty($assigned)) {
-         Helpers::sendFeedback('Cannot delete role assigned to members', 400);
+         Helpers::sendFeedback('Cannot delete role assigned to one or more members', 400);
       }
 
-      $orm->delete('churchrole', ['RoleID' => $roleId]);
+      $orm->beginTransaction();
+      try {
+         $orm->delete('rolepermission', ['ChurchRoleID' => $roleId]);  // Clean up permissions
+         $orm->delete('churchrole', ['RoleID' => $roleId]);
+         $orm->commit();
+
+         Helpers::logError("Role deleted: ID $roleId – {$role[0]['RoleName']}");
+      } catch (Exception $e) {
+         $orm->rollBack();
+         throw $e;
+      }
 
       return ['status' => 'success'];
    }
 
    /**
-    * Assign permissions to role (bulk)
+    * Assign multiple permissions to a role (replaces all existing)
+    *
+    * This is the canonical way to set role permissions.
+    * All previous permissions are removed and replaced atomically.
+    *
+    * @param int   $roleId         The target role ID
+    * @param array $permissionIds  Array of valid PermissionID values
+    * @return array{status:string} Success response
     */
-   public static function assignPermissions(int $roleId, array $permissionIds)
+   public static function assignPermissions(int $roleId, array $permissionIds): array
    {
       $orm = new ORM();
 
-      $role = $orm->getWhere('churchrole', ['RoleID' => $roleId]);
-      if (empty($role)) {
+      // Validate role exists
+      if (empty($orm->getWhere('churchrole', ['RoleID' => $roleId]))) {
          Helpers::sendFeedback('Role not found', 404);
+      }
+
+      // Validate all permission IDs exist
+      foreach ($permissionIds as $permId) {
+         if (!is_numeric($permId) || empty($orm->getWhere('permission', ['PermissionID' => (int)$permId]))) {
+            Helpers::sendFeedback("Invalid permission ID: $permId", 400);
+         }
       }
 
       $orm->beginTransaction();
       try {
-         // Clear existing
-         $orm->delete('rolepermission', ['RoleID' => $roleId]);
+         // Remove all existing permissions
+         $orm->delete('rolepermission', ['ChurchRoleID' => $roleId]);
 
+         // Insert new ones
          foreach ($permissionIds as $permId) {
-            if (!is_numeric($permId)) continue;
-
-            $perm = $orm->getWhere('permission', ['PermissionID' => (int)$permId]);
-            if (empty($perm)) {
-               throw new Exception("Invalid permission ID: $permId");
-            }
-
             $orm->insert('rolepermission', [
-               'RoleID'       => $roleId,
-               'PermissionID' => (int)$permId
+               'ChurchRoleID'  => $roleId,
+               'PermissionID'  => (int)$permId
             ]);
          }
 
          $orm->commit();
-         return ['status' => 'success'];
+         Helpers::logError("Permissions updated for Role ID $roleId");
       } catch (Exception $e) {
          $orm->rollBack();
-         Helpers::sendFeedback($e->getMessage(), 400);
+         throw $e;
       }
+
+      return ['status' => 'success'];
    }
 
    /**
-    * Get role with permissions
+    * Retrieve a single role with its complete permission set
+    *
+    * @param int $roleId The role ID
+    * @return array Full role data including permissions array
     */
    public static function get(int $roleId): array
    {
       $orm = new ORM();
 
-      $roles = $orm->selectWithJoin(
+      $result = $orm->selectWithJoin(
          baseTable: 'churchrole r',
          joins: [
-            ['table' => 'rolepermission rp', 'on' => 'r.RoleID = rp.RoleID', 'type' => 'LEFT'],
-            ['table' => 'permission p', 'on' => 'rp.PermissionID = p.PermissionID', 'type' => 'LEFT']
+            ['table' => 'rolepermission rp', 'on' => 'r.RoleID = rp.ChurchRoleID', 'type' => 'LEFT'],
+            ['table' => 'permission p',      'on' => 'rp.PermissionID = p.PermissionID', 'type' => 'LEFT']
          ],
          fields: ['r.*', 'p.PermissionID', 'p.PermissionName'],
          conditions: ['r.RoleID' => ':id'],
          params: [':id' => $roleId]
       );
 
-      if (empty($roles)) {
+      if (empty($result)) {
          Helpers::sendFeedback('Role not found', 404);
       }
 
-      $role = $roles[0];
+      $role = $result[0];
       $permissions = [];
-      foreach ($roles as $row) {
+
+      foreach ($result as $row) {
          if ($row['PermissionID']) {
             $permissions[] = [
                'permission_id'   => (int)$row['PermissionID'],
@@ -172,63 +230,73 @@ class Role
    }
 
    /**
-    * Get all roles with permissions
+    * Retrieve all roles with their permissions
+    *
+    * @return array{data:array} List of all roles with nested permissions
     */
    public static function getAll(): array
    {
       $orm = new ORM();
 
-      $roles = $orm->selectWithJoin(
+      $rows = $orm->selectWithJoin(
          baseTable: 'churchrole r',
          joins: [
-            ['table' => 'rolepermission rp', 'on' => 'r.RoleID = rp.RoleID', 'type' => 'LEFT'],
-            ['table' => 'permission p', 'on' => 'rp.PermissionID = p.PermissionID', 'type' => 'LEFT']
+            ['table' => 'rolepermission rp', 'on' => 'r.RoleID = rp.ChurchRoleID', 'type' => 'LEFT'],
+            ['table' => 'permission p',      'on' => 'rp.PermissionID = p.PermissionID', 'type' => 'LEFT']
          ],
          fields: ['r.RoleID', 'r.RoleName', 'r.Description', 'p.PermissionID', 'p.PermissionName'],
          orderBy: ['r.RoleName' => 'ASC']
       );
 
-      $result = [];
-      foreach ($roles as $row) {
-         $roleId = $row['RoleID'];
-         if (!isset($result[$roleId])) {
-            $result[$roleId] = [
-               'role_id'     => $roleId,
+      $roles = [];
+      foreach ($rows as $row) {
+         $id = $row['RoleID'];
+         if (!isset($roles[$id])) {
+            $roles[$id] = [
+               'role_id'     => $id,
                'role_name'   => $row['RoleName'],
                'description' => $row['Description'],
                'permissions' => []
             ];
          }
          if ($row['PermissionID']) {
-            $result[$roleId]['permissions'][] = [
+            $roles[$id]['permissions'][] = [
                'permission_id'   => (int)$row['PermissionID'],
                'permission_name' => $row['PermissionName']
             ];
          }
       }
 
-      return ['data' => array_values($result)];
+      return ['data' => array_values($roles)];
    }
 
    /**
-    * Assign role to member
+    * Assign a role to a church member
+    *
+    * Overwrites any existing role assignment for the member.
+    *
+    * @param int $memberId Member ID (MbrID)
+    * @param int $roleId   Role ID to assign
+    * @return array{status:string} Success response
     */
    public static function assignToMember(int $memberId, int $roleId): array
    {
       $orm = new ORM();
 
+      // Validate member
       $member = $orm->getWhere('churchmember', ['MbrID' => $memberId, 'Deleted' => 0]);
       if (empty($member)) {
          Helpers::sendFeedback('Member not found', 404);
       }
 
-      $role = $orm->getWhere('churchrole', ['RoleID' => $roleId]);
-      if (empty($role)) {
+      // Validate role
+      if (empty($orm->getWhere('churchrole', ['RoleID' => $roleId]))) {
          Helpers::sendFeedback('Role not found', 404);
       }
 
       $orm->update('churchmember', ['ChurchRoleID' => $roleId], ['MbrID' => $memberId]);
 
+      Helpers::logError("Role $roleId assigned to Member ID $memberId");
       return ['status' => 'success'];
    }
 }

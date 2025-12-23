@@ -3,45 +3,27 @@
 /**
  * Database Connection Manager
  *
- * Singleton class responsible for establishing and providing a secure PDO connection
- * to the MySQL database using configuration from environment variables.
+ * Secure singleton PDO connection with automatic reconnection,
+ * strict security options, and UTF8MB4 support.
  *
- * Features:
- * - Singleton pattern to ensure only one connection per request
- * - Persistent connections disabled by default (recommended for most APIs)
- * - Strict PDO options for security and error handling
- * - Automatic reconnection attempt on failure (basic resilience)
- *
- * @package AliveChMS\Core
- * @version 1.0.0
- * @author  Benjamin Ebo Yankson
- * @since   2025-11-19
+ * @package  AliveChMS\Core
+ * @version  1.0.0
+ * @author   Benjamin Ebo Yankson
+ * @since    2025-November
  */
+
+declare(strict_types=1);
 
 class Database
 {
-    /**
-     * The single instance of the Database class
-     *
-     * @var Database|null
-     */
-    private static ?Database $instance = null;
-
-    /**
-     * PDO database connection instance
-     *
-     * @var PDO
-     */
+    private static ?self $instance = null;
     private PDO $connection;
 
     /**
-     * Private constructor to prevent direct instantiation
+     * Private constructor – establishes secure PDO connection
      *
-     * Initializes the PDO connection with secure defaults:
-     * - Exception error mode
-     * - Associative fetch mode
-     * - Emulated prepares disabled (real prepared statements)
-     * - UTF8MB4 charset
+     * @return void
+     * @throws PDOException On connection failure after retries
      */
     private function __construct()
     {
@@ -54,41 +36,38 @@ class Database
         $dsn = "mysql:host=$host;dbname=$dbname;charset=$charset";
 
         $options = [
-            PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,       // Throw exceptions on errors
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,              // Always return associative arrays
-            PDO::ATTR_EMULATE_PREPARES   => false,                         // Use real prepared statements
-            PDO::ATTR_PERSISTENT         => false,                         // Do not use persistent connections
+            PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES   => false,
+            PDO::ATTR_PERSISTENT         => false,
             PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES $charset COLLATE utf8mb4_unicode_ci",
-            // PDO::MYSQL_ATTR_SSL_CA       => null,                          // Enable in production with valid cert
         ];
 
         $maxRetries = 3;
-        $retryDelay = 1; // second
+        $delay      = 1; // second
 
         for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
             try {
                 $this->connection = new PDO($dsn, $user, $pass, $options);
-                // Test the connection
                 $this->connection->query('SELECT 1');
-                return; // Success → exit constructor
+                return;
             } catch (PDOException $e) {
-                $errorMsg = "Database connection attempt $attempt failed: " . $e->getMessage();
+                $msg = "Database connection attempt $attempt failed: " . $e->getMessage();
 
                 if ($attempt === $maxRetries) {
-                    Helpers::logError($errorMsg);
-                    Helpers::sendFeedback('Database connection failed. Please try again later.', 503);
+                    Helpers::logError($msg);
+                    Helpers::sendFeedback('Service temporarily unavailable', 503);
                 }
 
-                // Wait before retry (avoid hammering)
-                sleep($retryDelay);
+                sleep($delay);
             }
         }
     }
 
     /**
-     * Get the singleton instance of the Database
+     * Get the singleton instance
      *
-     * @return Database The single instance
+     * @return self
      */
     public static function getInstance(): self
     {
@@ -102,7 +81,7 @@ class Database
     /**
      * Get the active PDO connection
      *
-     * @return PDO The PDO instance
+     * @return PDO
      */
     public function getConnection(): PDO
     {
@@ -110,15 +89,20 @@ class Database
     }
 
     /**
-     * Prevent cloning of the singleton instance
+     * Prevent cloning of the singleton
+     *
+     * @return void
      */
     private function __clone() {}
 
     /**
-     * Prevent unserializing of the singleton instance
+     * Prevent unserialization of the singleton
+     *
+     * @return void
+     * @throws Exception
      */
     public function __wakeup()
     {
-        throw new Exception("Cannot unserialize singleton");
+        throw new Exception('Cannot unserialize singleton Database');
     }
 }

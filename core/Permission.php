@@ -1,229 +1,229 @@
 <?php
 
 /**
- * Permission Class
- * This class handles operations related to permissions in the church management system.
- * It includes methods for creating, updating, deleting, retrieving a single permission, and listing all permissions with pagination.
- * @package Permission
- * @version 1.0
+ * Permission Management
+ *
+ * Provides complete CRUD operations for system permissions.
+ * Permissions are the atomic building blocks of the role-based access control (RBAC) system.
+ *
+ * Each permission represents a specific action (e.g., "view_members", "approve_expenses").
+ * Permissions are assigned to roles via the rolepermission junction table.
+ *
+ * This class ensures:
+ * - Unique permission names
+ * - Prevention of deletion when in use by any role
+ * - Full audit-ready responses
+ * - Consistent, strict-typed, secure implementation
+ *
+ * @package  AliveChMS\Core
+ * @version  1.0.0
+ * @author   Benjamin Ebo Yankson
+ * @since    2025-November
  */
+
+declare(strict_types=1);
+
 class Permission
 {
    /**
-    * Creates a new permission.
-    * Validates input, checks for duplicates, and inserts into the database.
-    * @param array $data The permission data to create.
-    * @return array The created permission ID and status.
-    * @throws Exception If validation fails or database operations fail.
+    * Create a new system permission
+    *
+    * The permission name must be unique across the entire system.
+    * Typical format: lowercase_with_underscores (e.g., "manage_members", "view_financial_reports")
+    *
+    * @param array{name:string} $data Contains the permission name
+    * @return array{status:string, permission_id:int} Success response with created ID
+    * @throws Exception On validation failure or database error
     */
-   public static function create($data)
+   public static function create(array $data): array
    {
       $orm = new ORM();
-      try {
-         // Validate input
-         Helpers::validateInput($data, [
-            'name' => 'required|alphanumeric_underscore'
-         ]);
 
-         // Check for duplicate permission name
-         $existing = $orm->getWhere('permission', ['PermissionName' => $data['name']]);
-         if (!empty($existing)) {
-            throw new Exception('Permission name already exists');
-         }
+      Helpers::validateInput($data, [
+         'name' => 'required|max:100'
+      ]);
 
-         $permissionId = $orm->insert('permission', [
-            'PermissionName' => $data['name']
-         ])['id'];
+      $name = trim($data['name']);
 
-         // Create notification
-         $orm->insert('communication', [
-            'Title' => 'New Permission Created',
-            'Message' => "Permission '{$data['name']}' has been created.",
-            'SentBy' => $data['created_by'] ?? 0,
-            'TargetGroupID' => null
-         ]);
+      // Enforce uniqueness
+      if (!empty($orm->getWhere('permission', ['PermissionName' => $name]))) {
+         Helpers::sendFeedback('Permission name already exists', 400);
+      }
 
+      $permissionId = $orm->insert('permission', [
+         'PermissionName' => $name
+      ])['id'];
+
+      Helpers::logError("New permission created: ID $permissionId – $name");
+
+      return [
+         'status'       => 'success',
+         'permission_id' => $permissionId
+      ];
+   }
+
+   /**
+    * Update an existing permission name
+    *
+    * Only the name can be updated. The ID remains immutable.
+    * Uniqueness is enforced excluding the current record.
+    *
+    * @param int $permissionId The primary key of the permission to update
+    * @param array{name:string} $data Contains the new name
+    * @return array{status:string, permission_id:int} Success response
+    */
+   public static function update(int $permissionId, array $data): array
+   {
+      $orm = new ORM();
+
+      $existing = $orm->getWhere('permission', ['PermissionID' => $permissionId]);
+      if (empty($existing)) {
+         Helpers::sendFeedback('Permission not found', 404);
+      }
+
+      if (empty($data['name'])) {
          return ['status' => 'success', 'permission_id' => $permissionId];
-      } catch (Exception $e) {
-         Helpers::logError('Permission create error: ' . $e->getMessage());
-         throw $e;
       }
+
+      $newName = trim($data['name']);
+      Helpers::validateInput(['name' => $newName], ['name' => 'required|max:100']);
+
+      // Prevent duplicate names (excluding current record)
+      $conflict = $orm->getWhere('permission', [
+         'PermissionName'     => $newName,
+         'PermissionID <>'    => $permissionId
+      ]);
+
+      if (!empty($conflict)) {
+         Helpers::sendFeedback('Permission name already exists', 400);
+      }
+
+      $orm->update('permission', ['PermissionName' => $newName], ['PermissionID' => $permissionId]);
+
+      Helpers::logError("Permission updated: ID $permissionId → $newName");
+
+      return [
+         'status'       => 'success',
+         'permission_id' => $permissionId
+      ];
    }
+
    /**
-    * Updates an existing permission.
-    * Validates input, checks for duplicates, and updates the database.
-    * @param int $permissionId The ID of the permission to update.
-    * @param array $data The updated permission data.
-    * @return array The updated permission ID and status.
-    * @throws Exception If validation fails or database operations fail.
+    * Delete a permission
+    *
+    * Deletion is blocked if the permission is currently assigned to any role.
+    * This prevents accidental removal of active access rights.
+    *
+    * @param int $permissionId The primary key of the permission to delete
+    * @return array{status:string} Success response
     */
-   public static function update($permissionId, $data)
+   public static function delete(int $permissionId): array
    {
       $orm = new ORM();
-      try {
-         // Validate input
-         Helpers::validateInput($data, [
-            'name' => 'required|alphanumeric_underscore'
-         ]);
 
-         // Validate permission exists
-         $permission = $orm->getWhere('permission', ['PermissionID' => $permissionId]);
-         if (empty($permission)) {
-            throw new Exception('Permission not found');
-         }
-
-         // Check for duplicate permission name
-         $existing = $orm->getWhere('permission', ['PermissionName' => $data['name'], 'PermissionID != ' => $permissionId]);
-         if (!empty($existing)) {
-            throw new Exception('Permission name already exists');
-         }
-
-         $orm->update('permission', [
-            'PermissionName' => $data['name']
-         ], ['PermissionID' => $permissionId]);
-
-         // Create notification
-         $orm->insert('communication', [
-            'Title' => 'Permission Updated',
-            'Message' => "Permission '{$data['name']}' has been updated.",
-            'SentBy' => $data['created_by'] ?? 0,
-            'TargetGroupID' => null
-         ]);
-
-         return ['status' => 'success', 'permission_id' => $permissionId];
-      } catch (Exception $e) {
-         Helpers::logError('Permission update error: ' . $e->getMessage());
-         throw $e;
+      $permission = $orm->getWhere('permission', ['PermissionID' => $permissionId]);
+      if (empty($permission)) {
+         Helpers::sendFeedback('Permission not found', 404);
       }
+
+      // Check if permission is in use
+      $inUse = $orm->getWhere('rolepermission', ['PermissionID' => $permissionId]);
+      if (!empty($inUse)) {
+         Helpers::sendFeedback('Cannot delete permission assigned to one or more roles', 400);
+      }
+
+      $orm->delete('permission', ['PermissionID' => $permissionId]);
+
+      Helpers::logError("Permission deleted: ID $permissionId – {$permission[0]['PermissionName']}");
+
+      return ['status' => 'success'];
    }
+
    /**
-    * Deletes a permission.
-    * Validates that the permission exists and is not assigned to any roles before deletion.
-    * @param int $permissionId The ID of the permission to delete.
-    * @return array The status of the deletion.
-    * @throws Exception If validation fails or database operations fail.
+    * Retrieve a single permission with its assigned roles
+    *
+    * Returns the permission details along with a list of roles that currently have this permission.
+    *
+    * @param int $permissionId The primary key of the permission
+    * @return array Permission data with assigned roles
     */
-   public static function delete($permissionId)
+   public static function get(int $permissionId): array
    {
       $orm = new ORM();
-      $transactionStarted = false;
-      try {
-         // Validate permission exists
-         $permission = $orm->getWhere('permission', ['PermissionID' => $permissionId]);
-         if (empty($permission)) {
-            throw new Exception('Permission not found');
-         }
 
-         // Check if permission is assigned to roles
-         $roles = $orm->getWhere('role_permission', ['PermissionID' => $permissionId]);
-         if (!empty($roles)) {
-            throw new Exception('Cannot delete permission assigned to roles');
-         }
-
-         $orm->beginTransaction();
-         $transactionStarted = true;
-
-         $orm->delete('permission', ['PermissionID' => $permissionId]);
-
-         $orm->commit();
-         return ['status' => 'success'];
-      } catch (Exception $e) {
-         if ($transactionStarted && $orm->inTransaction()) {
-            $orm->rollBack();
-         }
-         Helpers::logError('Permission delete error: ' . $e->getMessage());
-         throw $e;
+      $permission = $orm->getWhere('permission', ['PermissionID' => $permissionId]);
+      if (empty($permission)) {
+         Helpers::sendFeedback('Permission not found', 404);
       }
-   }
-   /**
-    * Retrieves a single permission by ID.
-    * Includes assigned roles in the response.
-    * @param int $permissionId The ID of the permission to retrieve.
-    * @return array The permission data with assigned roles.
-    * @throws Exception If permission not found or database operations fail.
-    */
-   public static function get($permissionId)
-   {
-      $orm = new ORM();
-      try {
-         $permission = $orm->getWhere('permission', ['PermissionID' => $permissionId])[0] ?? null;
-         if (!$permission) {
-            throw new Exception('Permission not found');
-         }
 
-         // Get assigned roles
-         $roles = $orm->selectWithJoin(
-            baseTable: 'role_permission rp',
-            joins: [
-               ['table' => 'role r', 'on' => 'rp.RoleID = r.RoleID', 'type' => 'LEFT']
-            ],
+      $roles = $orm->selectWithJoin(
+         baseTable: 'rolepermission rp',
+         joins: [['table' => 'churchrole r', 'on' => 'rp.ChurchRoleID = r.RoleID']],
             fields: ['r.RoleID', 'r.RoleName'],
             conditions: ['rp.PermissionID' => ':permission_id'],
             params: [':permission_id' => $permissionId]
-         );
+      );
 
-         $permission['Roles'] = $roles;
-         return $permission;
-      } catch (Exception $e) {
-         Helpers::logError('Permission get error: ' . $e->getMessage());
-         throw $e;
-      }
+      $result = $permission[0];
+      $result['assigned_roles'] = $roles;
+
+      return $result;
    }
-   /**
-    * Lists all permissions with pagination and optional filters.
-    * Supports filtering by permission name.
-    * @param int $page The page number for pagination.
-    * @param int $limit The number of permissions per page.
-    * @param array $filters Optional filters for the permission list.
-    * @return array The list of permissions with pagination info.
-    * @throws Exception If database operations fail.
-    */
-   public static function getAll($page = 1, $limit = 10, $filters = [])
-   {
-      $orm = new ORM();
-      try {
-         $offset = ($page - 1) * $limit;
-         $conditions = [];
-         $params = [];
 
-         if (!empty($filters['name']) && is_string($filters['name']) && trim($filters['name']) !== '') {
+   /**
+    * Retrieve all permissions with pagination and optional filtering
+    *
+    * Supports filtering by partial permission name.
+    * Each permission includes its currently assigned roles.
+    *
+    * @param int   $page    Current page number (1-based)
+    * @param int   $limit   Number of records per page
+    * @param array $filters Optional filters (e.g., ['name' => 'view'])
+    * @return array{data:array, pagination:array} Paginated result with metadata
+    */
+   public static function getAll(int $page = 1, int $limit = 20, array $filters = []): array
+   {
+      $orm    = new ORM();
+      $offset = ($page - 1) * $limit;
+
+      $conditions = [];
+      $params     = [];
+
+      if (!empty($filters['name'])) {
             $conditions['PermissionName LIKE'] = ':name';
             $params[':name'] = '%' . trim($filters['name']) . '%';
-         }
+      }
 
-         $permissions = $orm->getWhere('permission', $conditions, $params, $limit, $offset);
+      $permissions = $orm->getWhere('permission', $conditions, $params, $limit, $offset);
 
-         foreach ($permissions as &$permission) {
+      // Attach assigned roles to each permission
+      foreach ($permissions as &$perm) {
             $roles = $orm->selectWithJoin(
-               baseTable: 'role_permission rp',
-               joins: [
-                  ['table' => 'role r', 'on' => 'rp.RoleID = r.RoleID', 'type' => 'LEFT']
-               ],
-               fields: ['r.RoleID', 'r.RoleName'],
-               conditions: ['rp.PermissionID' => ':permission_id'],
-               params: [':permission_id' => $permission['PermissionID']]
+            baseTable: 'rolepermission rp',
+            joins: [['table' => 'churchrole r', 'on' => 'rp.ChurchRoleID = r.RoleID']],
+            fields: ['r.RoleID', 'r.RoleName'],
+            conditions: ['rp.PermissionID' => ':permission_id'],
+            params: [':permission_id' => $perm['PermissionID']]
             );
-            $permission['Roles'] = $roles;
-         }
 
-         $total = $orm->runQuery(
-            "SELECT COUNT(*) as total FROM permission" .
-               (!empty($conditions) ? ' WHERE ' . implode(' AND ', array_keys($conditions)) : ''),
+         $perm['assigned_roles'] = $roles;
+      }
+      unset($perm);
+
+      $total = $orm->runQuery(
+         "SELECT COUNT(*) AS total FROM permission" .
+            (!empty($conditions) ? ' WHERE ' . implode(' AND ', array_keys($conditions)) : ''),
             $params
-         )[0]['total'];
+      )[0]['total'];
 
-         return [
+      return [
             'data' => $permissions,
             'pagination' => [
-               'page' => $page,
-               'limit' => $limit,
-               'total' => $total,
-               'pages' => ceil($total / $limit)
+            'page'   => $page,
+            'limit'  => $limit,
+            'total'  => (int)$total,
+            'pages'  => (int)ceil($total / $limit)
             ]
-         ];
-      } catch (Exception $e) {
-         Helpers::logError('Permission getAll error: ' . $e->getMessage());
-         throw $e;
-      }
+      ];
    }
 }

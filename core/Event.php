@@ -1,14 +1,15 @@
 <?php
 
 /**
- * Event Management Class
- * Complete church event lifecycle including creation, updates, attendance,
- * volunteer assignment, bulk operations, and reporting.
+ * Event Management
  *
- * @package AliveChMS\Core
- * @version 1.0.0
- * @author  Benjamin Ebo Yankson
- * @since   2025-11-21
+ * Complete church event lifecycle: creation, update, deletion,
+ * bulk/single attendance recording, and detailed retrieval.
+ *
+ * @package  AliveChMS\Core
+ * @version  1.0.0
+ * @author   Benjamin Ebo Yankson
+ * @since    2025-November
  */
 
 declare(strict_types=1);
@@ -18,8 +19,9 @@ class Event
    /**
     * Create a new church event
     *
-    * @param array $data Event data
-    * @return array Success response with event_id
+    * @param array $data Event payload
+    * @return array ['status' => 'success', 'event_id' => int]
+    * @throws Exception On validation or database failure
     */
    public static function create(array $data): array
    {
@@ -53,12 +55,11 @@ class Event
          'EndTime'          => $data['end_time'] ?? null,
          'Location'         => $data['location'] ?? null,
          'BranchID'         => $branchId,
-         'CreatedBy'        => Auth::getCurrentUserId($token ?? ''),
+         'CreatedBy'        => Auth::getCurrentUserId(),
          'CreatedAt'        => date('Y-m-d H:i:s')
       ])['id'];
 
-      Helpers::logError("New event created: EventID $eventId - {$data['title']}");
-
+      Helpers::logError("New event created: EventID $eventId – {$data['title']}");
       return ['status' => 'success', 'event_id' => $eventId];
    }
 
@@ -67,7 +68,7 @@ class Event
     *
     * @param int   $eventId Event ID
     * @param array $data    Updated data
-    * @return array Success response
+    * @return array ['status' => 'success', 'event_id' => int]
     */
    public static function update(int $eventId, array $data): array
    {
@@ -79,6 +80,7 @@ class Event
       }
 
       $update = [];
+
       if (!empty($data['title']))       $update['EventTitle']       = $data['title'];
       if (isset($data['description']))  $update['EventDescription'] = $data['description'];
       if (!empty($data['event_date'])) {
@@ -87,9 +89,9 @@ class Event
          }
          $update['EventDate'] = $data['event_date'];
       }
-      if (!empty($data['start_time']))  $update['StartTime'] = $data['start_time'];
-      if (!empty($data['end_time']))    $update['EndTime']   = $data['end_time'];
-      if (!empty($data['location']))    $update['Location']  = $data['location'];
+      if (isset($data['start_time']))   $update['StartTime'] = $data['start_time'];
+      if (isset($data['end_time']))     $update['EndTime']   = $data['end_time'];
+      if (isset($data['location']))     $update['Location']  = $data['location'];
       if (!empty($data['branch_id'])) {
          if (empty($orm->getWhere('branch', ['BranchID' => (int)$data['branch_id']]))) {
             Helpers::sendFeedback('Invalid branch', 400);
@@ -108,7 +110,7 @@ class Event
     * Delete an event (only if no attendance recorded)
     *
     * @param int $eventId Event ID
-    * @return array Success response
+    * @return array ['status' => 'success']
     */
    public static function delete(int $eventId): array
    {
@@ -119,22 +121,20 @@ class Event
          Helpers::sendFeedback('Event not found', 404);
       }
 
-      $attendance = $orm->getWhere('event_attendance', ['EventID' => $eventId]);
-      if (!empty($attendance)) {
+      if (!empty($orm->getWhere('event_attendance', ['EventID' => $eventId]))) {
          Helpers::sendFeedback('Cannot delete event with recorded attendance', 400);
       }
 
       $orm->delete('event', ['EventID' => $eventId]);
-
       return ['status' => 'success'];
    }
 
    /**
-    * Record attendance for multiple members (bulk)
+    * Record bulk attendance for an event
     *
     * @param int   $eventId Event ID
-    * @param array $data    Attendance data
-    * @return array Success response
+    * @param array $data    Attendance payload with 'attendances' array
+    * @return array ['status' => 'success', 'message' => string]
     */
    public static function recordBulkAttendance(int $eventId, array $data): array
    {
@@ -189,21 +189,21 @@ class Event
    }
 
    /**
-    * Record attendance for a single member (used by mobile app or self-check-in)
+    * Record single attendance (mobile/self-check-in)
     *
-    * @param int    $eventId   Event ID
-    * @param int    $memberId  Member ID
-    * @param string $status    Present, Absent, Late, Excused
+    * @param int    $eventId  Event ID
+    * @param int    $memberId Member ID
+    * @param string $status   Default: 'Present'
     * @return array Success response
     */
    public static function recordSingleAttendance(int $eventId, int $memberId, string $status = 'Present'): array
    {
-      $orm = new ORM();
-
       $validStatuses = ['Present', 'Absent', 'Late', 'Excused'];
-      if (!in_array($status, $validStatuses)) {
+      if (!in_array($status, $validStatuses, true)) {
          Helpers::sendFeedback('Invalid attendance status', 400);
       }
+
+      $orm = new ORM();
 
       $event = $orm->getWhere('event', ['EventID' => $eventId]);
       if (empty($event)) {
@@ -245,17 +245,17 @@ class Event
     * Retrieve a single event with attendance summary
     *
     * @param int $eventId Event ID
-    * @return array Event data
+    * @return array Event data with attendance stats
     */
    public static function get(int $eventId): array
    {
       $orm = new ORM();
 
-      $events = $orm->selectWithJoin(
+      $result = $orm->selectWithJoin(
          baseTable: 'event e',
             joins: [
-            ['table' => 'branch b', 'on' => 'e.BranchID = b.BranchID'],
-            ['table' => 'churchmember c', 'on' => 'e.CreatedBy = c.MbrID', 'type' => 'LEFT']
+            ['table' => 'branch b',        'on' => 'e.BranchID = b.BranchID'],
+            ['table' => 'churchmember c',  'on' => 'e.CreatedBy = c.MbrID', 'type' => 'LEFT']
             ],
             fields: [
             'e.*',
@@ -267,11 +267,11 @@ class Event
             params: [':id' => $eventId]
       );
 
-      if (empty($events)) {
+      if (empty($result)) {
          Helpers::sendFeedback('Event not found', 404);
       }
 
-      $attendance = $orm->runQuery(
+      $stats = $orm->runQuery(
          "SELECT AttendanceStatus, COUNT(*) AS count 
              FROM event_attendance 
              WHERE EventID = :id 
@@ -280,19 +280,19 @@ class Event
       );
 
       $summary = ['Present' => 0, 'Absent' => 0, 'Late' => 0, 'Excused' => 0];
-      foreach ($attendance as $row) {
+      foreach ($stats as $row) {
          $summary[$row['AttendanceStatus']] = (int)$row['count'];
       }
 
-      $event = $events[0];
+      $event = $result[0];
       $event['attendance_summary'] = $summary;
-      $event['total_attendance'] = array_sum($summary);
+      $event['total_attendance']   = array_sum($summary);
 
       return $event;
    }
 
    /**
-    * Retrieve paginated list of events
+    * Retrieve paginated events with filters
     *
     * @param int   $page    Page number
     * @param int   $limit   Items per page
@@ -301,11 +301,11 @@ class Event
     */
    public static function getAll(int $page = 1, int $limit = 10, array $filters = []): array
    {
-      $orm = new ORM();
+      $orm    = new ORM();
       $offset = ($page - 1) * $limit;
 
       $conditions = [];
-      $params = [];
+      $params     = [];
 
       if (!empty($filters['branch_id'])) {
          $conditions['e.BranchID'] = ':branch';
@@ -340,17 +340,18 @@ class Event
       );
 
       $total = $orm->runQuery(
-         "SELECT COUNT(*) AS total FROM event e" . ($conditions ? ' WHERE ' . implode(' AND ', array_keys($conditions)) : ''),
+         "SELECT COUNT(*) AS total FROM event e" .
+            (!empty($conditions) ? ' WHERE ' . implode(' AND ', array_keys($conditions)) : ''),
          $params
       )[0]['total'];
 
       return [
          'data' => $events,
          'pagination' => [
-            'page'  => $page,
-            'limit' => $limit,
-            'total' => (int)$total,
-            'pages' => (int)ceil($total / $limit)
+            'page'   => $page,
+            'limit'  => $limit,
+            'total'  => (int)$total,
+            'pages'  => (int)ceil($total / $limit)
          ]
       ];
    }

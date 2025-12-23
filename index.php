@@ -1,26 +1,26 @@
 <?php
 
 /**
- * AliveChMS Backend API - Entry Point
+ * AliveChMS Backend API – Main Entry Point
  *
- * This file serves as the single entry point for the REST API.
- * It initializes the environment, loads dependencies, sets security headers,
- * and routes requests to appropriate handlers.
+ * Single entry point for the entire REST API.
+ * Initialises environment, security headers, loads dependencies,
+ * and dispatches requests via clean URL routing.
  *
- * @package AliveChMS
- * @version 1.0.0
- * @author  Benjamin Ebo Yankson
- * @since   2025-11-19
+ * @package  AliveChMS
+ * @version  1.0.0
+ * @author   Benjamin Ebo Yankson
+ * @since    2025-November
  */
 
 declare(strict_types=1);
 
-// Prevent direct access if not via web server
+// Block CLI access
 if (php_sapi_name() === 'cli') {
-    die('This is a web-only API entry point.');
+    die('Web-only access permitted.');
 }
 
-// Disable error display in production (errors are logged instead)
+// Production error handling
 ini_set('display_errors', '0');
 ini_set('display_startup_errors', '0');
 error_reporting(E_ALL);
@@ -30,7 +30,7 @@ date_default_timezone_set('Africa/Accra');
 // Composer autoloader
 require_once __DIR__ . '/vendor/autoload.php';
 
-// Load environment variables
+// Load environment
 $dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
 $dotenv->load();
 
@@ -44,59 +44,58 @@ require_once __DIR__ . '/core/Helpers.php';
 header('Content-Type: application/json; charset=utf-8');
 Helpers::addCorsHeaders();
 
-// Prevent path traversal attacks
+// Extract clean path
 $rawPath = $_GET['path'] ?? '';
+$path    = trim($rawPath, '/');
+$path    = preg_replace('#/{2,}#', '/', $path); // Remove double slashes
 
-// Prevent directory traversal and normalize
-$path = trim($rawPath, '/');
-$path = preg_replace('#/{2,}#', '/', $path); // Remove double slashes
-$path = htmlspecialchars($path, ENT_QUOTES, 'UTF-8'); // Final safety
-
-if (str_contains($path, '..') || str_contains($path, '\0')) {
-    Helpers::logError("Path traversal attempt: $path");
+// Block path traversal
+if (str_contains($path, '..') || str_contains($path, "\0")) {
+    Helpers::logError("Path traversal blocked: $rawPath");
     Helpers::sendFeedback('Invalid request path', 400);
 }
 
-if ($path === '') Helpers::sendFeedback('Welcome to AliveChMS API', 200, 'success');
+if ($path === '') {
+    header('Location: /public');
+    exit;
+}
 
 $pathParts = $path !== '' ? explode('/', $path) : [];
-$section = $pathParts[0] ?? '';
-$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-$token = Auth::getBearerToken();
+$section   = $pathParts[0] ?? '';
+$method    = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+$token     = Auth::getBearerToken();
 
-try {
-    $routes = [
-        'auth'             => 'AuthRoutes.php',
-        'budget'           => 'BudgetRoutes.php',
-        'contribution'     => 'ContributionRoutes.php',
-        'dashboard'        => 'DashboardRoutes.php',
-        'event'            => 'EventRoutes.php',
-        'expensecategory'  => 'ExpenseCategoryRoutes.php',
-        'expense'          => 'ExpenseRoutes.php',
-        'family'           => 'FamilyRoutes.php',
-        'finance'          => 'FinanceRoutes.php',
-        'fiscalyear'       => 'FiscalYearRoutes.php',
-        'group'            => 'GroupRoutes.php',
-        'grouptype'        => 'GroupRoutes.php',
-        'member'           => 'MemberRoutes.php',
-        'membershiptype'   => 'MembershipTypeRoutes.php',
-        'permission'       => 'PermissionRoutes.php',
-        'role'             => 'RoleRoutes.php',
-    ];
+// Master route map
+$routes = [
+    'auth'            => 'AuthRoutes.php',
+    'member'          => 'MemberRoutes.php',
+    'family'          => 'FamilyRoutes.php',
+    'contribution'    => 'ContributionRoutes.php',
+    'pledge'          => 'PledgeRoutes.php',
+    'expense'         => 'ExpenseRoutes.php',
+    'expensecategory' => 'ExpenseCategoryRoutes.php',
+    'budget'          => 'BudgetRoutes.php',
+    'event'           => 'EventRoutes.php',
+    'dashboard'       => 'DashboardRoutes.php',
+    'finance'         => 'FinanceRoutes.php',
+    'fiscalyear'      => 'FiscalYearRoutes.php',
+    'group'           => 'GroupRoutes.php',
+    'grouptype'       => 'GroupRoutes.php',
+    'membershiptype'  => 'MembershipTypeRoutes.php',
+    'role'            => 'RoleRoutes.php',
+    'permission'      => 'PermissionRoutes.php',
+    'volunteer'       => 'VolunteerRoutes.php',
+];
 
-    if (!array_key_exists($section, $routes)) {
-        Helpers::sendFeedback('Endpoint not found', 404);
-    }
+if (!isset($routes[$section])) {
+    Helpers::sendFeedback('Endpoint not found', 404);
+}
 
-    $routeFile = __DIR__ . '/routes/' . $routes[$section];
+$routeFile = __DIR__ . '/routes/' . $routes[$section];
 
-    if (!file_exists($routeFile)) {
-        Helpers::logError("Route file missing: $routeFile");
-        Helpers::sendFeedback('Internal server error', 500);
-    }
-
-    require_once $routeFile;
-} catch (Throwable $e) {
-    Helpers::logError('Uncaught exception in index.php: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+if (!file_exists($routeFile)) {
+    Helpers::logError("Missing route file: $routeFile");
     Helpers::sendFeedback('Internal server error', 500);
 }
+
+require_once $routeFile;

@@ -1,69 +1,96 @@
 <?php
 
 /**
- * Finance Reporting API Routes – RESTful & Convention-Compliant
+ * Financial Reporting API Routes – v1
  *
- * Endpoints:
- * /finance/income-statement/{fiscalYearId}
- * /finance/budget-vs-actual/{fiscalYearId}
- * /finance/expense-summary/{fiscalYearId}
- * /finance/contribution-summary/{fiscalYearId}
- * /finance/balance-sheet/{fiscalYearId}
+ * Exposes powerful, real-time financial intelligence for church leadership:
  *
- * @package AliveChMS\Routes
- * @version 1.0.0
- * @author  Benjamin Ebo Yankson
- * @since   2025-11-21
+ * Available Reports:
+ * • Income Statement – Full breakdown of income sources vs expenses
+ * • Budget vs Actual – Compare approved budgets against real expenditure
+ * • Expense Summary – Top spending categories with transaction counts
+ * • Contribution Summary – Giving breakdown by contribution type
+ * • Balance Sheet – Simple net financial position (cash in hand)
+ *
+ * All reports are:
+ * • Fiscal-year scoped (strict)
+ * • Optionally date-range filtered
+ * • Branch-aware (respects user context)
+ * • Fully permission-controlled
+ * • Formatted with proper currency rounding
+ *
+ * Ideal for treasurer reports, board meetings, and annual audits.
+ *
+ * @package  AliveChMS\Routes
+ * @version  1.0.0
+ * @author   Benjamin Ebo Yankson
+ * @since    2025-November
  */
+
+declare(strict_types=1);
 
 require_once __DIR__ . '/../core/Finance.php';
 
-if (!$token || !Auth::verify($token)) {
+// ---------------------------------------------------------------------
+// AUTHENTICATION & AUTHORIZATION
+// ---------------------------------------------------------------------
+$token = Auth::getBearerToken();
+if (!$token || Auth::verify($token) === false) {
    Helpers::sendFeedback('Unauthorized: Valid token required', 401);
 }
 
-$action        = $pathParts[1] ?? '';
-$fiscalYearId  = $pathParts[2] ?? null;
+Auth::checkPermission($token, 'view_financial_reports');
 
+// Extract common parameters
+$fiscalYearId = $pathParts[2] ?? null;
+$dateFrom     = $_GET['date_from'] ?? null;
+$dateTo       = $_GET['date_to'] ?? null;
+
+// Validate Fiscal Year ID presence and format
 if (!$fiscalYearId || !is_numeric($fiscalYearId)) {
-   Helpers::sendFeedback('Fiscal Year ID is required in URL', 400);
+   Helpers::sendFeedback('Fiscal Year ID is required in URL (e.g., /finance/income-statement/5)', 400);
 }
 
-$dateFrom = $_GET['date_from'] ?? null;
-$dateTo   = $_GET['date_to'] ?? null;
+// ---------------------------------------------------------------------
+// ROUTE DISPATCHER
+// ---------------------------------------------------------------------
+match (true) {
 
-switch ("$method $action") {
-
-   case 'GET income-statement':
-      Auth::checkPermission($token, 'view_financial_reports');
+   // INCOME STATEMENT
+   // Example: GET /finance/income-statement/5?date_from=2025-01-01&date_to=2025-06-30
+   $method === 'GET' && ($pathParts[1] ?? '') === 'income-statement' => (function () use ($fiscalYearId, $dateFrom, $dateTo) {
       $report = Finance::getIncomeStatement((int)$fiscalYearId, $dateFrom, $dateTo);
       echo json_encode($report);
-      break;
+   })(),
 
-   case 'GET budget-vs-actual':
-      Auth::checkPermission($token, 'view_financial_reports');
+   // BUDGET VS ACTUAL COMPARISON
+   // Shows variance per category – critical for financial oversight
+   $method === 'GET' && ($pathParts[1] ?? '') === 'budget-vs-actual' => (function () use ($fiscalYearId, $dateFrom, $dateTo) {
       $report = Finance::getBudgetVsActual((int)$fiscalYearId, $dateFrom, $dateTo);
       echo json_encode($report);
-      break;
+   })(),
 
-   case 'GET expense-summary':
-      Auth::checkPermission($token, 'view_financial_reports');
+   // EXPENSE SUMMARY BY CATEGORY
+   // Top-down view of where money is going – includes transaction count
+   $method === 'GET' && ($pathParts[1] ?? '') === 'expense-summary' => (function () use ($fiscalYearId, $dateFrom, $dateTo) {
       $report = Finance::getExpenseSummary((int)$fiscalYearId, $dateFrom, $dateTo);
       echo json_encode($report);
-      break;
+   })(),
 
-   case 'GET contribution-summary':
-      Auth::checkPermission($token, 'view_financial_reports');
+   // CONTRIBUTION SUMMARY BY TYPE
+   // Breaks down giving by tithe, offering, building fund, etc.
+   $method === 'GET' && ($pathParts[1] ?? '') === 'contribution-summary' => (function () use ($fiscalYearId, $dateFrom, $dateTo) {
       $report = Finance::getContributionSummary((int)$fiscalYearId, $dateFrom, $dateTo);
       echo json_encode($report);
-      break;
+   })(),
 
-   case 'GET balance-sheet':
-      Auth::checkPermission($token, 'view_financial_reports');
+   // SIMPLE BALANCE SHEET
+   // Cash-in-hand model: total income minus approved expenses
+   $method === 'GET' && ($pathParts[1] ?? '') === 'balance-sheet' => (function () use ($fiscalYearId, $dateFrom, $dateTo) {
       $report = Finance::getBalanceSheet((int)$fiscalYearId, $dateFrom, $dateTo);
       echo json_encode($report);
-      break;
+   })(),
 
-   default:
-      Helpers::sendFeedback('Finance endpoint not found', 404);
-}
+   // FALLBACK
+   default => Helpers::sendFeedback('Finance report endpoint not found', 404),
+};

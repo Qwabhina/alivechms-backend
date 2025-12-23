@@ -1,113 +1,136 @@
 <?php
 
 /**
- * Fiscal Year API Routes
- * This file handles fiscal year-related API routes for the AliveChMS backend.
- * It includes routes for creating, updating, deleting, viewing, and listing fiscal years,
- * as well as closing fiscal years.
- * It uses the FiscalYear class for business logic and the Auth class for permission checks.
+ * Fiscal Year API Routes – v1
+ *
+ * Complete fiscal year lifecycle management with strict financial integrity:
+ *
+ * Key Capabilities:
+ * • Create new fiscal years with automatic overlap protection
+ * • Update fiscal year boundaries (only while open)
+ * • Safely delete fiscal years with no associated transactions
+ * • Close fiscal year (irreversible — locks all financial data)
+ * • View single fiscal year with branch context
+ * • Powerful paginated listing with multi-filter support
+ *
+ * Business Rules Enforced:
+ * • Only one active fiscal year per branch at a time
+ * • No overlapping date ranges allowed
+ * • Cannot modify dates of a closed fiscal year
+ * • Cannot delete fiscal year with budgets, contributions, or expenses
+ *
+ * Critical for audit compliance, financial reporting, and year-end processes.
+ *
+ * @package  AliveChMS\Routes
+ * @version  1.0.0
+ * @author   Benjamin Ebo Yankson
+ * @since    2025-November
  */
+
+declare(strict_types=1);
+
 require_once __DIR__ . '/../core/FiscalYear.php';
 
-if (!$token || !Auth::verify($token))  Helpers::sendFeedback('Unauthorized', 401);
-
-switch ($method . ' ' . ($pathParts[0] ?? '') . '/' . ($pathParts[1] ?? '')) {
-   case 'POST fiscalyear/create':
-      // Auth::checkPermission($token, 'manage_fiscal_year');
-
-      $input = json_decode(file_get_contents('php://input'), true);
-      try {
-         $result = FiscalYear::create($input);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::logError('Fiscal year create error: ' . $e->getMessage());
-         Helpers::sendFeedback($e->getMessage(), 400);
-      }
-      break;
-
-   case 'POST fiscalyear/update':
-      // Auth::checkPermission($token, 'manage_fiscal_year');
-
-      $fiscalYearId = $pathParts[2] ?? null;
-      if (!$fiscalYearId) Helpers::sendFeedback('Fiscal year ID required', 400);
-
-      $input = json_decode(file_get_contents('php://input'), true);
-      try {
-         $result = FiscalYear::update($fiscalYearId, $input);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::logError('Fiscal year update error: ' . $e->getMessage());
-         Helpers::sendFeedback($e->getMessage(), 400);
-      }
-      break;
-
-   case 'POST fiscalyear/delete':
-      // Auth::checkPermission($token, 'manage_fiscal_year');
-
-      $fiscalYearId = $pathParts[2] ?? null;
-      if (!$fiscalYearId) Helpers::sendFeedback('Fiscal year ID required', 400);
-
-      try {
-         $result = FiscalYear::delete($fiscalYearId);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::logError('Fiscal year delete error: ' . $e->getMessage());
-         Helpers::sendFeedback($e->getMessage(), 400);
-      }
-      break;
-
-   case 'GET fiscalyear/view':
-      // Auth::checkPermission($token, 'view_fiscal_year');
-
-      $fiscalYearId = $pathParts[2] ?? null;
-      if (!$fiscalYearId) Helpers::sendFeedback('Fiscal year ID required', 400);
-
-      try {
-         $fiscalYear = FiscalYear::get($fiscalYearId);
-         echo json_encode($fiscalYear);
-      } catch (Exception $e) {
-         Helpers::logError('Fiscal year get error: ' . $e->getMessage());
-         Helpers::sendFeedback($e->getMessage(), 404);
-      }
-      break;
-
-   case 'GET fiscalyear/all':
-      // Auth::checkPermission($token, 'view_fiscal_year');
-
-      $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
-      $limit = isset($_GET['limit']) ? max(1, min(100, intval($_GET['limit']))) : 10;
-      $filters = [];
-
-      if (isset($_GET['branch_id'])) $filters['branch_id'] = $_GET['branch_id'];
-      if (isset($_GET['status'])) $filters['status'] = $_GET['status'];
-      if (isset($_GET['date_from'])) $filters['date_from'] = $_GET['date_from'];
-      if (isset($_GET['date_to'])) $filters['date_to'] = $_GET['date_to'];
-
-      try {
-         $result = FiscalYear::getAll($page, $limit, $filters);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::logError('Fiscal year getAll error: ' . $e->getMessage());
-         Helpers::sendFeedback($e->getMessage(), 400);
-      }
-      break;
-
-   case 'POST fiscalyear/close':
-      // Auth::checkPermission($token, 'manage_fiscal_year');
-
-      $fiscalYearId = $pathParts[2] ?? null;
-      if (!$fiscalYearId) Helpers::sendFeedback('Fiscal year ID required', 400);
-
-      try {
-         $result = FiscalYear::close($fiscalYearId);
-         echo json_encode($result);
-      } catch (Exception $e) {
-         Helpers::logError('Fiscal year close error: ' . $e->getMessage());
-         Helpers::sendFeedback($e->getMessage(), 400);
-      }
-      break;
-
-   default:
-      Helpers::sendFeedback('Request Malformed', 405);
-      break;
+// ---------------------------------------------------------------------
+// AUTHENTICATION & AUTHORIZATION
+// ---------------------------------------------------------------------
+$token = Auth::getBearerToken();
+if (!$token || Auth::verify($token) === false) {
+   Helpers::sendFeedback('Unauthorized: Valid token required', 401);
 }
+
+// ---------------------------------------------------------------------
+// ROUTE DISPATCHER
+// ---------------------------------------------------------------------
+match (true) {
+
+   // CREATE NEW FISCAL YEAR
+   $method === 'POST' && $path === 'fiscalyear/create' => (function () use ($token) {
+      Auth::checkPermission($token, 'manage_fiscal_years');
+
+      $payload = json_decode(file_get_contents('php://input'), true);
+      if (!is_array($payload)) {
+         Helpers::sendFeedback('Invalid JSON payload', 400);
+      }
+
+      $result = FiscalYear::create($payload);
+      echo json_encode($result);
+   })(),
+
+   // UPDATE FISCAL YEAR
+   $method === 'POST' && $pathParts[0] === 'fiscalyear' && ($pathParts[1] ?? '') === 'update' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
+      Auth::checkPermission($token, 'manage_fiscal_years');
+
+      $fiscalYearId = $pathParts[2];
+      if (!is_numeric($fiscalYearId)) {
+         Helpers::sendFeedback('Valid Fiscal Year ID required', 400);
+      }
+
+      $payload = json_decode(file_get_contents('php://input'), true);
+      if (!is_array($payload)) {
+         Helpers::sendFeedback('Invalid JSON payload', 400);
+      }
+
+      $result = FiscalYear::update((int)$fiscalYearId, $payload);
+      echo json_encode($result);
+   })(),
+
+   // DELETE FISCAL YEAR (Only if no financial records)
+   $method === 'POST' && $pathParts[0] === 'fiscalyear' && ($pathParts[1] ?? '') === 'delete' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
+      Auth::checkPermission($token, 'manage_fiscal_years');
+
+      $fiscalYearId = $pathParts[2];
+      if (!is_numeric($fiscalYearId)) {
+         Helpers::sendFeedback('Valid Fiscal Year ID required', 400);
+      }
+
+      $result = FiscalYear::delete((int)$fiscalYearId);
+      echo json_encode($result);
+   })(),
+
+   // VIEW SINGLE FISCAL YEAR
+   $method === 'GET' && $pathParts[0] === 'fiscalyear' && ($pathParts[1] ?? '') === 'view' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
+      Auth::checkPermission($token, 'view_fiscal_years');
+
+      $fiscalYearId = $pathParts[2];
+      if (!is_numeric($fiscalYearId)) {
+         Helpers::sendFeedback('Valid Fiscal Year ID required', 400);
+      }
+
+      $fiscalYear = FiscalYear::get((int)$fiscalYearId);
+      echo json_encode($fiscalYear);
+   })(),
+
+   // LIST ALL FISCAL YEARS (Paginated + Multi-Filter)
+   $method === 'GET' && $path === 'fiscalyear/all' => (function () use ($token) {
+      Auth::checkPermission($token, 'view_fiscal_years');
+
+      $page  = max(1, (int)($_GET['page'] ?? 1));
+      $limit = max(1, min(100, (int)($_GET['limit'] ?? 10)));
+
+      $filters = [];
+      if (isset($_GET['branch_id']) && is_numeric($_GET['branch_id']))   $filters['branch_id'] = (int)$_GET['branch_id'];
+      if (isset($_GET['status']) && in_array($_GET['status'], ['Active', 'Closed'])) $filters['status'] = $_GET['status'];
+      if (!empty($_GET['date_from']))  $filters['date_from'] = $_GET['date_from'];
+      if (!empty($_GET['date_to']))    $filters['date_to']   = $_GET['date_to'];
+
+      $result = FiscalYear::getAll($page, $limit, $filters);
+      echo json_encode($result);
+   })(),
+
+   // CLOSE FISCAL YEAR (Irreversible)
+   $method === 'POST' && $pathParts[0] === 'fiscalyear' && ($pathParts[1] ?? '') === 'close' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
+      Auth::checkPermission($token, 'manage_fiscal_years');
+
+      $fiscalYearId = $pathParts[2];
+      if (!is_numeric($fiscalYearId)) {
+         Helpers::sendFeedback('Valid Fiscal Year ID required', 400);
+      }
+
+      $result = FiscalYear::close((int)$fiscalYearId);
+      echo json_encode($result);
+   })(),
+
+   // FALLBACK
+   default => Helpers::sendFeedback('Fiscal year endpoint not found', 404),
+};

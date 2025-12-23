@@ -1,15 +1,15 @@
 <?php
 
 /**
- * Pledge Management Class
+ * Pledge Management
  *
- * Full pledge lifecycle: creation, tracking, payments, fulfillment, reporting.
- * Integrates with Contribution and FiscalYear modules.
+ * Full pledge lifecycle: creation, payment recording,
+ * status tracking, fulfillment detection, and reporting.
  *
- * @package AliveChMS\Core
- * @version 1.0.0
- * @author  Benjamin Ebo Yankson
- * @since   2025-11-21
+ * @package  AliveChMS\Core
+ * @version  1.0.0
+ * @author   Benjamin Ebo Yankson
+ * @since    2025-November
  */
 
 declare(strict_types=1);
@@ -23,8 +23,9 @@ class Pledge
    /**
     * Create a new pledge
     *
-    * @param array $data Pledge data
-    * @return array Success response with pledge_id
+    * @param array $data Pledge payload
+    * @return array ['status' => 'success', 'pledge_id' => int]
+    * @throws Exception On validation or database failure
     */
    public static function create(array $data): array
    {
@@ -49,9 +50,9 @@ class Pledge
          Helpers::sendFeedback('Pledge amount must be greater than zero', 400);
       }
 
-      // Validate references
+      // Validate foreign keys
       $valid = $orm->runQuery(
-         "SELECT 
+         "SELECT
                 (SELECT COUNT(*) FROM churchmember WHERE MbrID = :mid AND Deleted = 0 AND MbrMembershipStatus = 'Active') AS member_ok,
                 (SELECT COUNT(*) FROM pledge_type WHERE PledgeTypeID = :tid) AS type_ok,
                 (SELECT COUNT(*) FROM fiscalyear WHERE FiscalYearID = :fyid AND Status = 'Active') AS fy_ok",
@@ -71,12 +72,11 @@ class Pledge
          'DueDate'        => $data['due_date'] ?? null,
          'PledgeStatus'   => self::STATUS_ACTIVE,
          'Description'    => $data['description'] ?? null,
-         'CreatedBy'      => Auth::getCurrentUserId($token ?? ''),
+         'CreatedBy'      => Auth::getCurrentUserId(),
          'CreatedAt'      => date('Y-m-d H:i:s')
       ])['id'];
 
       Helpers::logError("New pledge created: PledgeID $pledgeId | Amount $amount | Member $memberId");
-
       return ['status' => 'success', 'pledge_id' => $pledgeId];
    }
 
@@ -85,7 +85,8 @@ class Pledge
     *
     * @param int   $pledgeId Pledge ID
     * @param array $data     Payment data
-    * @return array Success response
+    * @return array ['status' => 'success', 'message' => string]
+    * @throws Exception On failure
     */
    public static function recordPayment(int $pledgeId, array $data): array
    {
@@ -97,8 +98,8 @@ class Pledge
       }
 
       Helpers::validateInput($data, [
-         'amount'       => 'required|numeric',
-         'payment_date' => 'required|date',
+         'amount'         => 'required|numeric',
+         'payment_date'   => 'required|date',
          'contribution_id' => 'numeric|nullable'
       ]);
 
@@ -110,15 +111,15 @@ class Pledge
       $orm->beginTransaction();
       try {
          $orm->insert('pledge_payment', [
-            'PledgeID'        => $pledgeId,
-            'ContributionID'  => !empty($data['contribution_id']) ? (int)$data['contribution_id'] : null,
-            'PaymentAmount'   => $paymentAmount,
-            'PaymentDate'     => $data['payment_date'],
-            'RecordedBy'      => Auth::getCurrentUserId($token ?? ''),
-            'RecordedAt'      => date('Y-m-d H:i:s')
+            'PledgeID'       => $pledgeId,
+            'ContributionID' => !empty($data['contribution_id']) ? (int)$data['contribution_id'] : null,
+            'PaymentAmount'  => $paymentAmount,
+            'PaymentDate'    => $data['payment_date'],
+            'RecordedBy'     => Auth::getCurrentUserId(),
+            'RecordedAt'     => date('Y-m-d H:i:s')
          ]);
 
-         // Check if pledge is now fulfilled
+         // Check fulfillment
          $paid = $orm->runQuery(
             "SELECT COALESCE(SUM(PaymentAmount), 0) AS paid FROM pledge_payment WHERE PledgeID = :id",
             [':id' => $pledgeId]
@@ -137,21 +138,118 @@ class Pledge
    }
 
    /**
-    * Get pledge with payment progress
+    * Update an existing pledge
+    *
+    * Allowed fields:
+    * - amount (only if no payments recorded)
+    * - pledge_date, due_date
+    * - description
+    * - pledge_type_id
+    *
+    * Prevents changes that would corrupt financial integrity.
+    *
+    * @param int   $pledgeId Pledge ID
+    * @param array $data     Updated fields
+    * @return array Success response
+    * @throws Exception On validation or business rule violation
+    */
+   public static function update(int $pledgeId, array $data): array
+   {
+      $orm = new ORM();
+
+      $pledge = $orm->getWhere('pledge', ['PledgeID' => $pledgeId])[0] ?? null;
+      if (!$pledge) {
+         Helpers::sendFeedback('Pledge not found', 404);
+      }
+
+      if ($pledge['PledgeStatus'] === self::STATUS_FULFILLED) {
+         Helpers::sendFeedback('Cannot modify a fulfilled pledge', 400);
+      }
+
+      if ($pledge['PledgeStatus'] === self::STATUS_CANCELLED) {
+         Helpers::sendFeedback('Cannot modify a cancelled pledge', 400);
+      }
+
+      $update = [];
+
+      // Amount can only be changed if no payments exist
+      if (isset($data['amount'])) {
+         $newAmount = (float)$data['amount'];
+         if ($newAmount <= 0) {
+            Helpers::sendFeedback('Pledge amount must be greater than zero', 400);
+         }
+
+         $paid = $orm->runQuery(
+            "SELECT COALESCE(SUM(PaymentAmount), 0) AS paid FROM pledge_payment WHERE PledgeID = :id",
+            [':id' => $pledgeId]
+         )[0]['paid'];
+
+         if ($paid > 0 && $newAmount < $paid) {
+            Helpers::sendFeedback('Cannot reduce amount below total paid', 400);
+         }
+
+         $update['PledgeAmount'] = $newAmount;
+      }
+
+      if (!empty($data['pledge_date'])) {
+         $update['PledgeDate'] = $data['pledge_date'];
+      }
+
+      if (isset($data['due_date'])) {
+         $update['DueDate'] = $data['due_date'] === '' ? null : $data['due_date'];
+      }
+
+      if (isset($data['description'])) {
+         $update['Description'] = $data['description'] ?? null;
+      }
+
+      if (!empty($data['pledge_type_id'])) {
+         $typeExists = $orm->getWhere('pledge_type', ['PledgeTypeID' => (int)$data['pledge_type_id']]);
+         if (empty($typeExists)) {
+            Helpers::sendFeedback('Invalid pledge type', 400);
+         }
+         $update['PledgeTypeID'] = (int)$data['pledge_type_id'];
+      }
+
+      if (empty($update)) {
+         return ['status' => 'success', 'message' => 'No changes applied', 'pledge_id' => $pledgeId];
+      }
+
+      $orm->update('pledge', $update, ['PledgeID' => $pledgeId]);
+
+      // Re-check fulfillment status after amount change
+      if (isset($update['PledgeAmount'])) {
+         $paid = $orm->runQuery(
+            "SELECT COALESCE(SUM(PaymentAmount), 0) AS paid FROM pledge_payment WHERE PledgeID = :id",
+            [':id' => $pledgeId]
+         )[0]['paid'];
+
+         $newStatus = ($paid >= $update['PledgeAmount']) ? self::STATUS_FULFILLED : self::STATUS_ACTIVE;
+         if ($pledge['PledgeStatus'] !== $newStatus) {
+            $orm->update('pledge', ['PledgeStatus' => $newStatus], ['PledgeID' => $pledgeId]);
+         }
+      }
+
+      Helpers::logError("Pledge updated: PledgeID $pledgeId");
+      return ['status' => 'success', 'pledge_id' => $pledgeId];
+   }
+
+   /**
+    * Retrieve a single pledge with payment progress
     *
     * @param int $pledgeId Pledge ID
-    * @return array Pledge details
+    * @return array Pledge details with payments
     */
    public static function get(int $pledgeId): array
    {
       $orm = new ORM();
 
-      $pledges = $orm->selectWithJoin(
+      $result = $orm->selectWithJoin(
          baseTable: 'pledge p',
          joins: [
-            ['table' => 'churchmember m', 'on' => 'p.MbrID = m.MbrID'],
-            ['table' => 'pledge_type pt', 'on' => 'p.PledgeTypeID = pt.PledgeTypeID'],
-            ['table' => 'fiscalyear fy', 'on' => 'p.FiscalYearID = fy.FiscalYearID']
+            ['table' => 'churchmember m',  'on' => 'p.MbrID = m.MbrID'],
+            ['table' => 'pledge_type pt',  'on' => 'p.PledgeTypeID = pt.PledgeTypeID'],
+            ['table' => 'fiscalyear fy',   'on' => 'p.FiscalYearID = fy.FiscalYearID']
          ],
          fields: [
             'p.*',
@@ -164,36 +262,36 @@ class Pledge
          params: [':id' => $pledgeId]
       );
 
-      if (empty($pledges)) {
+      if (empty($result)) {
          Helpers::sendFeedback('Pledge not found', 404);
       }
 
       $payments = $orm->getWhere('pledge_payment', ['PledgeID' => $pledgeId]);
       $totalPaid = array_sum(array_column($payments, 'PaymentAmount'));
 
-      $pledge = $pledges[0];
+      $pledge = $result[0];
       $pledge['total_paid'] = $totalPaid;
-      $pledge['balance'] = (float)$pledge['PledgeAmount'] - $totalPaid;
-      $pledge['payments'] = $payments;
+      $pledge['balance']    = (float)$pledge['PledgeAmount'] - $totalPaid;
+      $pledge['payments']   = $payments;
 
       return $pledge;
    }
 
    /**
-    * Get all pledges with filters and pagination
+    * Retrieve paginated pledges with filters
     *
     * @param int   $page    Page number
     * @param int   $limit   Items per page
-    * @param array $filters Filters
+    * @param array $filters Optional filters
     * @return array Paginated result
     */
    public static function getAll(int $page = 1, int $limit = 10, array $filters = []): array
    {
-      $orm = new ORM();
+      $orm    = new ORM();
       $offset = ($page - 1) * $limit;
 
       $conditions = [];
-      $params = [];
+      $params     = [];
 
       if (!empty($filters['member_id'])) {
          $conditions['p.MbrID'] = ':mid';
@@ -213,7 +311,7 @@ class Pledge
          joins: [
             ['table' => 'churchmember m', 'on' => 'p.MbrID = m.MbrID'],
             ['table' => 'pledge_type pt', 'on' => 'p.PledgeTypeID = pt.PledgeTypeID'],
-            ['table' => 'fiscalyear fy', 'on' => 'p.FiscalYearID = fy.FiscalYearID']
+            ['table' => 'fiscalyear fy',  'on' => 'p.FiscalYearID = fy.FiscalYearID']
          ],
          fields: [
             'p.PledgeID',
@@ -233,15 +331,19 @@ class Pledge
          offset: $offset
       );
 
-      $total = $orm->runQuery("SELECT COUNT(*) AS total FROM pledge p" . ($conditions ? ' WHERE ' . implode(' AND ', array_keys($conditions)) : ''), $params)[0]['total'];
+      $total = $orm->runQuery(
+         "SELECT COUNT(*) AS total FROM pledge p" .
+            (!empty($conditions) ? ' WHERE ' . implode(' AND ', array_keys($conditions)) : ''),
+         $params
+      )[0]['total'];
 
       return [
          'data' => $pledges,
          'pagination' => [
-            'page' => $page,
-            'limit' => $limit,
-            'total' => (int)$total,
-            'pages' => (int)ceil($total / $limit)
+            'page'   => $page,
+            'limit'  => $limit,
+            'total'  => (int)$total,
+            'pages'  => (int)ceil($total / $limit)
          ]
       ];
    }
