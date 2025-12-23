@@ -1,5 +1,11 @@
 # .htaccess - AliveChMS API
-# Secure and clean URL routing with CDN support
+# Secure and clean URL routing
+
+##### OLD CODE #####
+# RewriteEngine On
+# RewriteCond %{REQUEST_FILENAME} !-f
+# RewriteRule ^(.*)$ index.php?path=$1 [QSA,L]
+
 
 # Prevent directory listing
 Options -Indexes
@@ -19,26 +25,13 @@ RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^(.*)$ index.php?path=$1 [QSA,L]
 
-# Security headers
+# Security headers (if not set in PHP)
 <IfModule mod_headers.c>
-    # Basic security headers
     Header always set X-Content-Type-Options nosniff
     Header always set X-Frame-Options DENY
     Header always set X-XSS-Protection "1; mode=block"
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
-    
-    # Updated Content-Security-Policy to allow CDN resources
-    # This allows Bootstrap, Chart.js, SweetAlert2, etc. from trusted CDNs
-    Header always set Content-Security-Policy "\
-        default-src 'self'; \
-        script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://code.jquery.com https://cdn.datatables.net; \
-        style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdn.datatables.net https://fonts.googleapis.com; \
-        font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; \
-        img-src 'self' data: https:; \
-        connect-src 'self' https://cdn.jsdelivr.net; \
-        frame-ancestors 'none'; \
-        base-uri 'self'; \
-        form-action 'self'"
+    Header always set Content-Security-Policy "default-src 'self'"
 </IfModule>
 
 # Disable server signature
