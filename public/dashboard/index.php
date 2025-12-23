@@ -13,7 +13,8 @@
          </nav>
       </div>
       <div class="col-auto">
-         <button class="btn btn-primary" onclick="location.reload()">
+         <!-- <button class="btn btn-primary" onclick="location.reload()"> -->
+         <button class="btn btn-primary" onclick="loadDashboard()">
             <i class="bi bi-arrow-clockwise me-2"></i>Refresh
          </button>
       </div>
