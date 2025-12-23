@@ -69,9 +69,9 @@ class Dashboard
          )[0]['total'];
 
          $expenses = $orm->runQuery(
-            "SELECT COALESCE(SUM(ExpenseAmount), 0) AS total
+            "SELECT COALESCE(SUM(ExpAmount), 0) AS total
                  FROM expense
-                 WHERE FiscalYearID = :fy AND ExpenseStatus = 'Approved' AND BranchID = :branch",
+                 WHERE FiscalYearID = :fy AND ExpStatus = 'Approved' AND BranchID = :branch",
             [':fy' => $fyId, ':branch' => $branchId]
          )[0]['total'];
 
@@ -85,69 +85,84 @@ class Dashboard
       // Last 4 Sundays Attendance
       $attendance = $orm->runQuery(
          "SELECT
-                DATE(e.EventDate) AS date,
+                DATE(e.EventDateTime) AS date,
                 COALESCE(SUM(CASE WHEN ea.AttendanceStatus = 'Present' THEN 1 ELSE 0 END), 0) AS present
-             FROM event e
+             FROM churchevent e
              LEFT JOIN event_attendance ea ON e.EventID = ea.EventID
              WHERE e.BranchID = :branch
-               AND e.EventDate <= :today
-               AND DAYOFWEEK(e.EventDate) = 1
-             GROUP BY e.EventDate
-             ORDER BY e.EventDate DESC
+               AND e.EventDateTime <= :today
+               AND DAYOFWEEK(e.EventDateTime) = 1
+             GROUP BY e.EventDateTime
+             ORDER BY e.EventDateTime DESC
              LIMIT 4",
          [':branch' => $branchId, ':today' => $today]
       );
 
       // Upcoming Events (Next 7 days)
       $upcomingEvents = $orm->runQuery(
-         "SELECT EventID, EventTitle, EventDate, StartTime, Location
-             FROM event
+         "SELECT EventID, EventName, EventDateTime, Location
+             FROM churchevent
              WHERE BranchID = :branch
-               AND EventDate BETWEEN :today AND DATE_ADD(:today, INTERVAL 7 DAY)
-             ORDER BY EventDate, StartTime
+               AND EventDateTime BETWEEN :today AND DATE_ADD(:nextweek, INTERVAL 7 DAY)
+             ORDER BY EventDateTime DESC
              LIMIT 5",
-         [':branch' => $branchId, ':today' => $today]
+         [':branch' => $branchId, ':today' => $today, ':nextweek' => date('Y-m-d', strtotime('+7 days'))]
       );
 
       // Pending Approvals
       $pending = [
          'budgets'  => (int)$orm->runQuery(
-            "SELECT COUNT(*) AS cnt FROM budget WHERE BudgetStatus = 'Submitted' AND BranchID = :br",
+            "SELECT COUNT(*) AS cnt FROM churchbudget WHERE BudgetStatus = 'Submitted' AND BranchID = :br",
             [':br' => $branchId]
          )[0]['cnt'],
          'expenses' => (int)$orm->runQuery(
-            "SELECT COUNT(*) AS cnt FROM expense WHERE ExpenseStatus = 'Pending Approval' AND BranchID = :br",
+            "SELECT COUNT(*) AS cnt FROM expense WHERE ExpStatus = 'Pending Approval' AND BranchID = :br",
             [':br' => $branchId]
          )[0]['cnt']
       ];
 
       // Recent Activity (Last 7 days)
+      $cutoff = date('Y-m-d', strtotime('-7 days'));
+
       $activity = $orm->runQuery(
          "SELECT 'Member Registered' AS type,
-                    CONCAT(m.MbrFirstName, ' ', m.MbrFamilyName) AS description,
-                    m.MbrRegistrationDate AS timestamp
-             FROM churchmember m
-             WHERE m.BranchID = :br AND m.MbrRegistrationDate >= DATE_SUB(:today, INTERVAL 7 DAY)
+       CONCAT(m.MbrFirstName, ' ', m.MbrFamilyName) AS description,
+       m.MbrRegistrationDate AS timestamp
+FROM churchmember m
+WHERE m.BranchID = :br1
+  AND m.MbrRegistrationDate >= :cutoff1
 
-             UNION ALL
+UNION ALL
 
-             SELECT 'Contribution' AS type,
-                    CONCAT('GHS ', c.ContributionAmount) AS description,
-                    c.ContributionDate AS timestamp
-             FROM contribution c
-             WHERE c.BranchID = :br AND c.ContributionDate >= DATE_SUB(:today, INTERVAL 7 DAY)
+SELECT 'Contribution' AS type,
+       CONCAT('GHS ', c.ContributionAmount) AS description,
+       c.ContributionDate AS timestamp
+FROM contribution c
+WHERE c.BranchID = :br2
+  AND c.ContributionDate >= :cutoff2
 
-             UNION ALL
+UNION ALL
 
-             SELECT 'Event Created' AS type,
-                    e.EventTitle AS description,
-                    e.CreatedAt AS timestamp
-             FROM event e
-             WHERE e.BranchID = :br AND e.CreatedAt >= DATE_SUB(:today, INTERVAL 7 DAY)
+SELECT 'Event Created' AS type,
+       e.EventName AS description,
+       e.CreatedAt AS timestamp
+FROM churchevent e
+WHERE e.BranchID = :br3
+  AND e.CreatedAt >= :cutoff3
 
-             ORDER BY timestamp DESC
-             LIMIT 10",
-         [':br' => $branchId, ':today' => $today]
+ORDER BY timestamp DESC
+LIMIT 10
+",
+         [
+            ':br1' => 1,
+            ':br2' => 1,
+            ':br3' => 1,
+
+            ':cutoff1' => $cutoff,
+            ':cutoff2' => $cutoff,
+            ':cutoff3' => $cutoff,
+         ]
+
       );
 
       return [
