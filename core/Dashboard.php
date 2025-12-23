@@ -64,7 +64,7 @@ class Dashboard
          $income = $orm->runQuery(
             "SELECT COALESCE(SUM(ContributionAmount), 0) AS total
                  FROM contribution
-                 WHERE FiscalYearID = :fy AND Deleted = 0 AND BranchID = :branch",
+                 WHERE FiscalYearID = :fy AND BranchID = :branch",
             [':fy' => $fyId, ':branch' => $branchId]
          )[0]['total'];
 
@@ -76,9 +76,9 @@ class Dashboard
          )[0]['total'];
 
          $finance = [
-            'income'   => number_format((float)$income, 2),
-            'expenses' => number_format((float)$expenses, 2),
-            'net'      => number_format((float)$income - (float)$expenses, 2)
+            'income'   => (float)$income,
+            'expenses' => (float)$expenses,
+            'net'      => (float)$income - (float)$expenses
          ];
       }
 
