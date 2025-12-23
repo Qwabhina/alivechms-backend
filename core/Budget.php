@@ -40,20 +40,14 @@ class Budget
          'items'          => 'required'
       ]);
 
-      if (!is_array($data['items']) || empty($data['items'])) {
-         Helpers::sendFeedback('At least one budget item is required', 400);
-      }
+      if (!is_array($data['items']) || empty($data['items'])) Helpers::sendError('At least one budget item is required', 400);
 
       $fiscalYearId = (int)$data['fiscal_year_id'];
       $branchId     = (int)$data['branch_id'];
 
       // Validate references
-      if (empty($orm->getWhere('fiscalyear', ['FiscalYearID' => $fiscalYearId, 'Status' => 'Active']))) {
-         Helpers::sendFeedback('Invalid or inactive fiscal year', 400);
-      }
-      if (empty($orm->getWhere('branch', ['BranchID' => $branchId]))) {
-         Helpers::sendFeedback('Invalid branch', 400);
-      }
+      if (empty($orm->getWhere('fiscalyear', ['FiscalYearID' => $fiscalYearId, 'Status' => 'Active']))) Helpers::sendError('Invalid or inactive fiscal year', 400);
+      if (empty($orm->getWhere('branch', ['BranchID' => $branchId]))) Helpers::sendError('Invalid branch', 400);
 
       $orm->beginTransaction();
       try {
@@ -73,11 +67,12 @@ class Budget
          $orm->update('budget', ['TotalAmount' => $total], ['BudgetID' => $budgetId]);
          $orm->commit();
 
-         return ['status' => 'success', 'budget_id' => $budgetId];
+         // Return success response
+         Helpers::sendSuccess('', 200, 'Budget [' . $budgetId . '] created successfully');
       } catch (Exception $e) {
          $orm->rollBack();
          Helpers::logError("Budget creation failed: " . $e->getMessage());
-         throw $e;
+         Helpers::sendError('Failed to create budget');
       }
    }
 
@@ -96,12 +91,9 @@ class Budget
       $update = [];
       if (!empty($data['title']))       $update['BudgetTitle']       = $data['title'];
       if (isset($data['description']))  $update['BudgetDescription'] = $data['description'];
+      if (!empty($update))  $orm->update('budget', $update, ['BudgetID' => $budgetId]);
 
-      if (!empty($update)) {
-         $orm->update('budget', $update, ['BudgetID' => $budgetId]);
-      }
-
-      return ['status' => 'success', 'budget_id' => $budgetId];
+      Helpers::sendSuccess('', 200, 'Budget updated successfully');
    }
 
    /**
@@ -121,7 +113,7 @@ class Budget
       ], ['BudgetID' => $budgetId]);
 
       Helpers::logError("Budget submitted: BudgetID $budgetId");
-      return ['status' => 'success', 'message' => 'Budget submitted for approval'];
+      Helpers::sendSuccess('', 200, 'Budget submitted for approval');
    }
 
    /**
@@ -138,7 +130,7 @@ class Budget
 
       $budget = $orm->getWhere('budget', ['BudgetID' => $budgetId])[0] ?? null;
       if (!$budget || $budget['BudgetStatus'] !== self::STATUS_SUBMITTED) {
-         Helpers::sendFeedback('Only submitted budgets can be reviewed', 400);
+         Helpers::sendError('Only submitted budgets can be reviewed', 400);
       }
 
       $newStatus = $action === 'approve' ? self::STATUS_APPROVED : self::STATUS_REJECTED;
@@ -185,7 +177,7 @@ class Budget
       );
 
       if (empty($result)) {
-         Helpers::sendFeedback('Budget not found', 404);
+         Helpers::sendError('Budget not found', 404);
       }
 
       $items = $orm->getWhere('budget_items', ['BudgetID' => $budgetId]);
@@ -278,7 +270,7 @@ class Budget
 
       $amount = (float)$item['amount'];
       if ($amount <= 0) {
-         Helpers::sendFeedback('Amount must be greater than zero', 400);
+         Helpers::sendError('Amount must be greater than zero', 400);
       }
 
       $orm->beginTransaction();
@@ -305,7 +297,7 @@ class Budget
 
       $item = $orm->getWhere('budget_items', ['ItemID' => $itemId])[0] ?? null;
       if (!$item) {
-         Helpers::sendFeedback('Item not found', 404);
+         Helpers::sendError('Item not found', 404);
       }
 
       self::ensureDraft((int)$item['BudgetID']);
@@ -316,13 +308,13 @@ class Budget
       if (isset($data['amount'])) {
          $amount = (float)$data['amount'];
          if ($amount <= 0) {
-            Helpers::sendFeedback('Amount must be greater than zero', 400);
+            Helpers::sendError('Amount must be greater than zero', 400);
          }
          $update['Amount'] = $amount;
       }
 
       if (empty($update)) {
-         return ['status' => 'success', 'message' => 'No changes'];
+         Helpers::sendSuccess('', 200, 'No changes provided');
       }
 
       $orm->beginTransaction();
@@ -343,7 +335,7 @@ class Budget
 
       $item = $orm->getWhere('budget_items', ['ItemID' => $itemId])[0] ?? null;
       if (!$item) {
-         Helpers::sendFeedback('Item not found', 404);
+         Helpers::sendError('Item not found', 404);
       }
 
       self::ensureDraft((int)$item['BudgetID']);
@@ -367,10 +359,10 @@ class Budget
       $orm = new ORM();
       $b   = $orm->getWhere('budget', ['BudgetID' => $budgetId])[0] ?? null;
       if (!$b) {
-         Helpers::sendFeedback('Budget not found', 404);
+         Helpers::sendError('Budget not found', 404);
       }
       if ($b['BudgetStatus'] !== self::STATUS_DRAFT) {
-         Helpers::sendFeedback('Only draft budgets can be modified', 400);
+         Helpers::sendError('Only draft budgets can be modified', 400);
       }
    }
 

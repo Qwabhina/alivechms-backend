@@ -89,7 +89,7 @@ class Member
             $orm->insert('userauthentication', [
                 'MbrID'        => $mbrId,
                 'Username'     => $data['username'],
-                'PasswordHash' => password_hash($data['password'], PASSWORD_BCRYPT),
+                'PasswordHash' => password_hash($data['password'], PASSWORD_DEFAULT),
                 'CreatedAt'    => date('Y-m-d H:i:s')
             ]);
 
