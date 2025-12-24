@@ -40,7 +40,7 @@ match (true) {
     // CREATE FAMILY
     // =================================================================
     $method === 'POST' && $path === 'family/create' => (function () use ($token) {
-        Auth::checkPermission($token, 'manage_families');
+        Auth::checkPermission('manage_families');
 
         $payload = json_decode(file_get_contents('php://input'), true);
         if (!is_array($payload)) {
@@ -54,8 +54,8 @@ match (true) {
     // =================================================================
     // UPDATE FAMILY
     // =================================================================
-    $method === 'PUT' && $pathParts[0] === 'family' && ($pathParts[1] ?? '') === 'update' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
-        Auth::checkPermission($token, 'manage_families');
+    $method === 'PUT' && $pathParts[0] === 'family' && ($pathParts[1] ?? '') === 'update' && isset($pathParts[2]) => (function () use ($pathParts) {
+        Auth::checkPermission('manage_families');
 
         $familyId = $pathParts[2];
         if (!is_numeric($familyId)) {
@@ -74,8 +74,8 @@ match (true) {
     // =================================================================
     // DELETE FAMILY
     // =================================================================
-    $method === 'DELETE' && $pathParts[0] === 'family' && ($pathParts[1] ?? '') === 'delete' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
-        Auth::checkPermission($token, 'manage_families');
+    $method === 'DELETE' && $pathParts[0] === 'family' && ($pathParts[1] ?? '') === 'delete' && isset($pathParts[2]) => (function () use ($pathParts) {
+        Auth::checkPermission('manage_families');
 
         $familyId = $pathParts[2];
         if (!is_numeric($familyId)) {
@@ -89,8 +89,8 @@ match (true) {
     // =================================================================
     // VIEW SINGLE FAMILY
     // =================================================================
-    $method === 'GET' && $pathParts[0] === 'family' && ($pathParts[1] ?? '') === 'view' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
-        Auth::checkPermission($token, 'view_families');
+    $method === 'GET' && $pathParts[0] === 'family' && ($pathParts[1] ?? '') === 'view' && isset($pathParts[2]) => (function () use ($pathParts) {
+        Auth::checkPermission('view_families');
 
         $familyId = $pathParts[2];
         if (!is_numeric($familyId)) {
@@ -104,8 +104,8 @@ match (true) {
     // =================================================================
     // LIST ALL FAMILIES (Paginated + Filtered)
     // =================================================================
-    $method === 'GET' && $path === 'family/all' => (function () use ($token) {
-        Auth::checkPermission($token, 'view_families');
+    $method === 'GET' && $path === 'family/all' => (function () {
+        Auth::checkPermission('view_families');
 
         $page   = max(1, (int)($_GET['page'] ?? 1));
         $limit  = max(1, min(100, (int)($_GET['limit'] ?? 10)));
@@ -125,8 +125,8 @@ match (true) {
     // =================================================================
     // ADD MEMBER TO FAMILY
     // =================================================================
-    $method === 'POST' && $pathParts[0] === 'family' && ($pathParts[1] ?? '') === 'addMember' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
-        Auth::checkPermission($token, 'manage_families');
+    $method === 'POST' && $pathParts[0] === 'family' && ($pathParts[1] ?? '') === 'addMember' && isset($pathParts[2]) => (function () use ($pathParts) {
+        Auth::checkPermission('manage_families');
 
         $familyId = $pathParts[2];
         if (!is_numeric($familyId)) {
@@ -145,8 +145,8 @@ match (true) {
     // =================================================================
     // REMOVE MEMBER FROM FAMILY
     // =================================================================
-    $method === 'DELETE' && $pathParts[0] === 'family' && ($pathParts[1] ?? '') === 'removeMember' && isset($pathParts[2], $pathParts[3]) => (function () use ($token, $pathParts) {
-        Auth::checkPermission($token, 'manage_families');
+    $method === 'DELETE' && $pathParts[0] === 'family' && ($pathParts[1] ?? '') === 'removeMember' && isset($pathParts[2], $pathParts[3]) => (function () use ($pathParts) {
+        Auth::checkPermission('manage_families');
 
         $familyId = $pathParts[2];
         $memberId = $pathParts[3];
@@ -161,8 +161,8 @@ match (true) {
     // =================================================================
     // UPDATE MEMBER ROLE IN FAMILY
     // =================================================================
-    $method === 'PUT' && $pathParts[0] === 'family' && ($pathParts[1] ?? '') === 'updateMemberRole' && isset($pathParts[2], $pathParts[3]) => (function () use ($token, $pathParts) {
-        Auth::checkPermission($token, 'manage_families');
+    $method === 'PUT' && $pathParts[0] === 'family' && ($pathParts[1] ?? '') === 'updateMemberRole' && isset($pathParts[2], $pathParts[3]) => (function () use ($pathParts) {
+        Auth::checkPermission('manage_families');
 
         $familyId = $pathParts[2];
         $memberId = $pathParts[3];

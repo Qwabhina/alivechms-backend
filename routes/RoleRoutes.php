@@ -54,7 +54,7 @@ match (true) {
 
    // CREATE ROLE
    $method === 'POST' && $path === 'role/create' => (function () use ($token) {
-      Auth::checkPermission($token, 'manage_roles');
+      Auth::checkPermission('manage_roles');
 
       $payload = json_decode(file_get_contents('php://input'), true);
       if (!is_array($payload)) {
@@ -66,8 +66,8 @@ match (true) {
    })(),
 
    // UPDATE ROLE
-   $method === 'PUT' && $pathParts[0] === 'role' && ($pathParts[1] ?? '') === 'update' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
-      Auth::checkPermission($token, 'manage_roles');
+   $method === 'PUT' && $pathParts[0] === 'role' && ($pathParts[1] ?? '') === 'update' && isset($pathParts[2]) => (function () use ($pathParts) {
+      Auth::checkPermission('manage_roles');
 
       $roleId = $pathParts[2];
       if (!is_numeric($roleId)) {
@@ -84,8 +84,8 @@ match (true) {
    })(),
 
    // DELETE ROLE
-   $method === 'DELETE' && $pathParts[0] === 'role' && ($pathParts[1] ?? '') === 'delete' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
-      Auth::checkPermission($token, 'manage_roles');
+   $method === 'DELETE' && $pathParts[0] === 'role' && ($pathParts[1] ?? '') === 'delete' && isset($pathParts[2]) => (function () use ($pathParts) {
+      Auth::checkPermission('manage_roles');
 
       $roleId = $pathParts[2];
       if (!is_numeric($roleId)) {
@@ -97,8 +97,8 @@ match (true) {
    })(),
 
    // VIEW SINGLE ROLE (with full permission tree)
-   $method === 'GET' && $pathParts[0] === 'role' && ($pathParts[1] ?? '') === 'view' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
-      Auth::checkPermission($token, 'view_roles');
+   $method === 'GET' && $pathParts[0] === 'role' && ($pathParts[1] ?? '') === 'view' && isset($pathParts[2]) => (function () use ($pathParts) {
+      Auth::checkPermission('view_roles');
 
       $roleId = $pathParts[2];
       if (!is_numeric($roleId)) {
@@ -111,15 +111,15 @@ match (true) {
 
    // LIST ALL ROLES (with permissions)
    $method === 'GET' && $path === 'role/all' => (function () use ($token) {
-      Auth::checkPermission($token, 'view_roles');
+      Auth::checkPermission('view_roles');
 
       $result = Role::getAll();
       echo json_encode($result);
    })(),
 
    // ASSIGN PERMISSIONS TO ROLE (Replace All)
-   $method === 'POST' && $pathParts[0] === 'role' && ($pathParts[1] ?? '') === 'permissions' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
-      Auth::checkPermission($token, 'manage_roles');
+   $method === 'POST' && $pathParts[0] === 'role' && ($pathParts[1] ?? '') === 'permissions' && isset($pathParts[2]) => (function () use ($pathParts) {
+      Auth::checkPermission('manage_roles');
 
       $roleId = $pathParts[2];
       if (!is_numeric($roleId)) {
@@ -136,8 +136,8 @@ match (true) {
    })(),
 
    // ASSIGN ROLE TO MEMBER
-   $method === 'POST' && $pathParts[0] === 'role' && ($pathParts[1] ?? '') === 'assign' && isset($pathParts[2]) => (function () use ($token, $pathParts) {
-      Auth::checkPermission($token, 'manage_roles');
+   $method === 'POST' && $pathParts[0] === 'role' && ($pathParts[1] ?? '') === 'assign' && isset($pathParts[2]) => (function () use ($pathParts) {
+      Auth::checkPermission('manage_roles');
 
       $memberId = $pathParts[2];
       if (!is_numeric($memberId)) {
