@@ -287,9 +287,14 @@
          financeChart.destroy();
       }
 
-      const income = parseFloat(data.income || 0);
-      const expenses = parseFloat(data.expenses || 0);
-      const net = income - expenses;
+      const income = data.income.toFixed(2);
+      const expenses = data.expenses.toFixed(2);
+      const net = data.net.toFixed(2);
+      console.log({
+         income,
+         expenses,
+         net
+      });
 
       // Update text values
       document.getElementById('totalIncome').textContent = Utils.formatCurrency(income);

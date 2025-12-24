@@ -106,8 +106,8 @@ match (true) {
     // =================================================================
     // LIST ALL MEMBERS (Paginated)
     // =================================================================
-    $method === 'GET' && $path === 'member/all' => (function () use ($token) {
-        // Auth::checkPermission('view_members');
+    $method === 'GET' && $path === 'member/all' => (function () {
+        Auth::checkPermission('view_members');
 
         $page  = max(1, (int)($_GET['page'] ?? 1));
         $limit = max(1, min(100, (int)($_GET['limit'] ?? 10)));
